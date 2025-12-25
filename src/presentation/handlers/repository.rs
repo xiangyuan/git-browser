@@ -462,6 +462,56 @@ pub async fn api_cherry_pick(
     }))
 }
 
+/// API: Push branch to remote
+#[derive(Deserialize)]
+pub struct PushRequest {
+    branch: String,
+}
+
+#[derive(Serialize)]
+pub struct PushResponse {
+    success: bool,
+    error: Option<String>,
+}
+
+pub async fn api_push(
+    State(ctx): State<Arc<AppContext>>,
+    Path(repo_name): Path<String>,
+    Json(req): Json<PushRequest>,
+) -> Result<Json<PushResponse>> {
+    let repo = ctx.repository_store
+        .find_by_name(&repo_name)
+        .await?
+        .ok_or_else(|| crate::shared::error::GitxError::RepositoryNotFound(repo_name.clone()))?;
+    
+    let repo_path = std::path::PathBuf::from(&repo.path);
+    
+    use tokio::process::Command;
+    
+    // 执行git push
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("push")
+        .arg("origin")
+        .arg(&req.branch)
+        .output()
+        .await?;
+    
+    if output.status.success() {
+        Ok(Json(PushResponse {
+            success: true,
+            error: None,
+        }))
+    } else {
+        let error_msg = String::from_utf8_lossy(&output.stderr).to_string();
+        Ok(Json(PushResponse {
+            success: false,
+            error: Some(error_msg),
+        }))
+    }
+}
+
 fn get_diff_links(ctx: &AppContext, repo_name: &str, active: Option<(&str, &str)>) -> Vec<DiffLink> {
     ctx.config
         .projects

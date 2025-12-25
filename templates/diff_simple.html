@@ -49,12 +49,18 @@
             ✓ No new commits in {{ to_branch }} - branches are in sync or {{ from_branch }} is ahead
         </p>
         {% else %}
-        <div style="padding: 0.5em; background: #fff3cd; border-left: 3px solid #ffc107; margin-bottom: 1em; display: flex; justify-content: space-between; align-items: center;">
-            <span>Found <strong>{{ commits.len() }}</strong> commits</span>
-            <button onclick="cherryPickSelected()" style="padding: 0.5em 1em; background: #0969da; color: white; border: none; border-radius: 6px; cursor: pointer;">
-                🍒 Cherry-pick Selected
-            </button>
+        <div style="padding: 0.5em 1em; background: #fff3cd; border-left: 3px solid #ffc107; margin-bottom: 1em; display: flex; justify-content: space-between; align-items: center;">
+            <span>Found <strong>{{ commits.len() }}</strong> commits <span id="cherry-picked-count" style="color: #2ea44f; font-weight: 600;"></span></span>
+            <div style="display: flex; gap: 8px;">
+                <button onclick="cherryPickSelected()" style="padding: 0.5em 1.2em; background: #0969da; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; box-shadow: 0 1px 3px rgba(27,31,36,0.12);" onmouseover="this.style.background='#0860ca'" onmouseout="this.style.background='#0969da'">
+                    🍒 Cherry-pick Selected
+                </button>
+                <button onclick="pushChanges()" id="push-btn" style="padding: 0.5em 1.2em; background: #6e7781; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; box-shadow: 0 1px 3px rgba(27,31,36,0.12); display: none;" onmouseover="this.style.background='#57606a'" onmouseout="this.style.background='#6e7781'">
+                    ↑ Push to Remote
+                </button>
+            </div>
         </div>
+        <div id="status-message" style="display: none; padding: 1em; margin-bottom: 1em; border-radius: 6px;"></div>
         <table class="repositories">
             <thead>
                 <tr>
@@ -91,7 +97,7 @@
     }
     
     function toggleAll(checkbox) {
-        const checkboxes = document.querySelectorAll('.commit-checkbox');
+        const checkboxes = document.querySelectorAll('.commit-checkbox:not(:disabled)');
         checkboxes.forEach(cb => cb.checked = checkbox.checked);
     }
     
@@ -100,16 +106,18 @@
         const commits = Array.from(checkboxes).map(cb => cb.value);
         
         if (commits.length === 0) {
-            alert('Please select at least one commit');
+            showMessage('Please select at least one commit', 'warning');
             return;
         }
         
         const targetBranch = document.getElementById('to-branch').value;
-        const confirmMsg = `Cherry-pick ${commits.length} commit(s) to ${targetBranch}?\n\nCommits: ${commits.join(', ')}`;
+        const confirmMsg = `Cherry-pick ${commits.length} commit(s) to ${targetBranch}?\n\nThis will apply the changes locally. You'll need to push afterwards.`;
         
         if (!confirm(confirmMsg)) {
             return;
         }
+        
+        showMessage(`Cherry-picking ${commits.length} commits...`, 'info');
         
         // 调用API执行cherry-pick
         fetch(`/{{ repo_name }}/api/cherry-pick`, {
@@ -123,13 +131,100 @@
         .then(res => res.json())
         .then(data => {
             if (data.success) {
-                alert(`Successfully cherry-picked ${data.count} commits`);
-                window.location.reload();
+                showMessage(
+                    `✅ Successfully cherry-picked ${data.count} commits to ${targetBranch}!\n` +
+                    `Next step: Click "Push to Remote" to sync with the server.`,
+                    'success'
+                );
+                // 显示push按钮
+                document.getElementById('push-btn').style.display = 'block';
+                
+                // 标记已处理的commit（变灰、禁用checkbox、添加✓图标）
+                checkboxes.forEach(cb => {
+                    const row = cb.closest('tr');
+                    row.style.opacity = '0.5';
+                    row.style.background = '#f6f8fa';
+                    cb.disabled = true;
+                    cb.checked = false;
+                    
+                    // 在commit message前添加✓标记
+                    const messageCell = row.cells[2];
+                    if (!messageCell.textContent.startsWith('✓ ')) {
+                        const link = messageCell.querySelector('a');
+                        if (link) {
+                            link.textContent = '✓ ' + link.textContent;
+                        }
+                    }
+                });
+                document.getElementById('select-all').checked = false;
+                
+                // 更新统计信息
+                updateCherryPickedCount();
             } else {
-                alert(`Cherry-pick failed: ${data.error}`);
+                showMessage(`❌ Cherry-pick failed: ${data.error}\n\nPicked ${data.count} commits before failure.`, 'error');
             }
         })
-        .catch(err => alert(`Error: ${err.message}`));
+        .catch(err => showMessage(`❌ Error: ${err.message}`, 'error'));
+    }
+    
+    function pushChanges() {
+        const targetBranch = document.getElementById('to-branch').value;
+        if (!confirm(`Push local changes to origin/${targetBranch}?`)) {
+            return;
+        }
+        
+        showMessage('Pushing to remote...', 'info');
+        
+        fetch(`/{{ repo_name }}/api/push`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ branch: targetBranch })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                showMessage('✅ Successfully pushed to remote! Refreshing...', 'success');
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showMessage(`❌ Push failed: ${data.error}`, 'error');
+            }
+        })
+        .catch(err => showMessage(`❌ Error: ${err.message}`, 'error'));
+    }
+    
+    function showMessage(text, type) {
+        const msgDiv = document.getElementById('status-message');
+        msgDiv.style.display = 'block';
+        msgDiv.textContent = text;
+        msgDiv.style.whiteSpace = 'pre-line';
+        
+        if (type === 'success') {
+            msgDiv.style.background = '#d1f4e0';
+            msgDiv.style.borderLeft = '3px solid #2ea44f';
+            msgDiv.style.color = '#1a7f37';
+        } else if (type === 'error') {
+            msgDiv.style.background = '#ffebe9';
+            msgDiv.style.borderLeft = '3px solid #cf222e';
+            msgDiv.style.color = '#a40e26';
+        } else if (type === 'warning') {
+            msgDiv.style.background = '#fff3cd';
+            msgDiv.style.borderLeft = '3px solid #ffc107';
+            msgDiv.style.color = '#856404';
+        } else {
+            msgDiv.style.background = '#ddf4ff';
+            msgDiv.style.borderLeft = '3px solid #0969da';
+            msgDiv.style.color = '#0550ae';
+        }
+    }
+    
+    function updateCherryPickedCount() {
+        const disabledCount = document.querySelectorAll('.commit-checkbox:disabled').length;
+        const countSpan = document.getElementById('cherry-picked-count');
+        if (disabledCount > 0) {
+            countSpan.textContent = `(✓ ${disabledCount} cherry-picked)`;
+        } else {
+            countSpan.textContent = '';
+        }
     }
     </script>
 </body>

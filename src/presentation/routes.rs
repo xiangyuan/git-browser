@@ -27,6 +27,7 @@ pub fn create_app_router(ctx: Arc<AppContext>) -> Router {
         .route("/{repo}/commit", get(handlers::repository::repo_commit))
         .route("/{repo}/diff-beta", get(handlers::repository::repo_diff))
         .route("/{repo}/api/cherry-pick", post(handlers::repository::api_cherry_pick))
+        .route("/{repo}/api/push", post(handlers::repository::api_push))
         
         // API 路由
         .nest("/api", api_routes())
