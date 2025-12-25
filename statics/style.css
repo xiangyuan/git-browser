@@ -1,0 +1,365 @@
+.mt-2 {
+    margin-top: 2rem
+}
+
+.text-center {
+    text-align: center
+}
+
+.no-hover:hover {
+    text-decoration: none
+}
+
+@media (prefers-color-scheme: dark) {
+    pre.diff {
+        color: #abb2bf
+    }
+}
+
+.diff-add-line::before, .diff-remove-line::before, .diff-context::before {
+    display: inline-block;
+    color: #888;
+    -webkit-user-select: none
+}
+
+.diff-file-header {
+    font-weight: bold
+}
+
+.diff-file-header > span > span {
+    font-weight: normal
+}
+
+.diff-add-line {
+    background: #e6ffec;
+    display: block
+}
+
+@media (prefers-color-scheme: dark) {
+    .diff-add-line {
+        background: rgba(70, 149, 74, .15)
+    }
+}
+
+.diff-add-line::before {
+    content: "+ "
+}
+
+.diff-remove-line {
+    background: #ffebe9;
+    display: block
+}
+
+@media (prefers-color-scheme: dark) {
+    .diff-remove-line {
+        background: rgba(229, 83, 75, .15)
+    }
+}
+
+.diff-remove-line::before {
+    content: "- "
+}
+
+.diff-context::before {
+    content: "  "
+}
+
+table {
+    border-collapse: collapse
+}
+
+@media (prefers-color-scheme: dark) {
+    table {
+        color: #106307
+    }
+}
+
+table th {
+    text-align: left
+}
+
+table.repositories {
+    width: 100%
+}
+
+table.repositories a {
+    color: black
+}
+
+@media (prefers-color-scheme: dark) {
+    table.repositories a {
+        color: #147b09
+    }
+}
+
+table.repositories a:hover {
+    color: #00f
+}
+
+@media (prefers-color-scheme: dark) {
+    table.repositories a:hover {
+        color: #147b09;
+        text-decoration: underline
+    }
+}
+
+table.repositories tbody tr {
+    height: 1.3rem;
+    vertical-align: middle
+}
+
+table.repositories tbody tr:nth-child(odd) {
+    background: #f7f7f7
+}
+
+@media (prefers-color-scheme: dark) {
+    table.repositories tbody tr:nth-child(odd) {
+        background: #111
+    }
+}
+
+table.repositories tbody tr:nth-child(even) {
+    background: #e1e1e1
+}
+
+@media (prefers-color-scheme: dark) {
+    table.repositories tbody tr:nth-child(even) {
+        background: none
+    }
+}
+
+table.repositories tbody tr.no-background {
+    background: none
+}
+
+table.repositories tbody tr.has-parent td:first-of-type {
+    padding-left: 1rem
+}
+
+table.repositories tbody tr td.repo-section {
+    font-style: italic;
+    color: #888
+}
+
+table.repositories tbody tr.separator {
+    background: none !important;
+    height: 1rem
+}
+
+table.repositories tbody pre {
+    margin: 0
+}
+table.repositories tbody tr:hover {
+    background-color: #333333;
+}
+
+table.repositories .nested-tree {
+    color: blue !important;
+    font-weight: bold
+}
+
+@media (prefers-color-scheme: dark) {
+    table.repositories .nested-tree {
+        color: #abb2bf !important
+    }
+}
+
+table.commit-info td, table.commit-info th {
+    padding: .1em 1em .1em .1em
+}
+
+pre {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    overflow: auto;
+    counter-reset: line
+}
+
+pre.h2-first-line::first-line {
+    font-family: "Jost", -apple-system, blinkmacsystemfont, "Segoe UI", roboto, "Helvetica Neue", arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";;
+    font-size: 1.5em;
+    font-weight: bold
+}
+
+pre code {
+    counter-increment: line
+}
+
+@media (prefers-color-scheme: dark) {
+    pre code {
+        color: #abb2bf
+    }
+}
+
+pre code::before {
+    content: counter(line);
+    display: inline-block;
+    width: 2em;
+    padding: 0 1em .3em 0;
+    margin-right: .5em;
+    color: #888;
+    -webkit-user-select: none
+}
+
+@media (prefers-color-scheme: dark) {
+    html {
+        background: #000;
+        color: #abb2bf
+    }
+
+    h2, h3 {
+        color: #106307
+    }
+}
+
+body {
+    font-family: "Jost", -apple-system, blinkmacsystemfont, "Segoe UI", roboto, "Helvetica Neue", arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";;
+    font-size: .9rem;
+    tab-size: 4
+}
+
+header {
+    border-bottom: solid 1px #ccc
+}
+
+nav {
+    display: flex;
+    flex-direction: column;
+    width: 10%;
+    float: left;
+    gap: 10px;
+    position: fixed;
+    /* margin-top: 2rem; */
+    /* border-bottom: solid 3px #ccc */
+}
+
+@media (prefers-color-scheme: dark) {
+    /* nav {
+        border-bottom-color: #20c20e
+    } */
+}
+
+nav a {
+    padding: 2px .75em;
+    color: #777;
+    font-size: 110%
+}
+
+@media (prefers-color-scheme: dark) {
+    nav a {
+        color: #20c20e
+    }
+}
+
+nav a.active {
+    color: #000;
+    background-color: #ccc
+}
+
+@media (prefers-color-scheme: dark) {
+    nav a.active {
+        background: #18920b
+    }
+}
+
+main {
+    float: right;
+    width: 90%;
+    /* padding: 2rem; */
+    margin: 0;
+    /* border-bottom: solid 3px #ccc */
+}
+
+@media (prefers-color-scheme: dark) {
+    /* main {
+        border-bottom-color: #20c20e
+    } */
+}
+
+footer {
+    float: right;
+    margin-top: .5em;
+    text-align: center;
+    font-size: 80%;
+    color: #ccc
+}
+
+@media (prefers-color-scheme: dark) {
+    footer {
+        color: #abb2bf
+    }
+}
+
+a {
+    text-decoration: none;
+    color: blue
+}
+
+@media (prefers-color-scheme: dark) {
+    a {
+        color: #18920b
+    }
+}
+
+a.no-style {
+    color: inherit
+}
+
+@media (prefers-color-scheme: dark) {
+    a.no-style {
+        color: #18920b
+    }
+}
+
+a:hover {
+    text-decoration: underline
+}
+
+@font-face {
+    font-family: "Jost";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: local("Jost"), url("fonts/jost-v4-latin-regular.woff2") format("woff2"), url("fonts/jost-v4-latin-regular.woff2") format("woff2")
+}
+
+@font-face {
+    font-family: "Jost";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: local("Jost"), url("fonts/jost-v4-latin-500.woff2") format("woff2"), url("fonts/jost-v4-latin-500.woff2") format("woff2")
+}
+
+@font-face {
+    font-family: "Jost";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: local("Jost"), url("fonts/jost-v4-latin-700.woff2") format("woff2"), url("fonts/jost-v4-latin-700.woff2") format("woff2")
+}
+
+@font-face {
+    font-family: "Jost";
+    font-style: italic;
+    font-weight: 400;
+    font-display: swap;
+    src: local("Jost"), url("fonts/jost-v4-latin-italic.woff2") format("woff2"), url("fonts/jost-v4-latin-italic.woff2") format("woff2")
+}
+
+@font-face {
+    font-family: "Jost";
+    font-style: italic;
+    font-weight: 500;
+    font-display: swap;
+    src: local("Jost"), url("fonts/jost-v4-latin-italic.woff2") format("woff2"), url("fonts/jost-v4-latin-italic.woff2") format("woff2")
+}
+
+@font-face {
+    font-family: "Jost";
+    font-style: italic;
+    font-weight: 700;
+    font-display: swap;
+    src: local("Jost"), url("fonts/jost-v4-latin-italic.woff2") format("woff2"), url("fonts/jost-v4-latin-italic.woff2") format("woff2")
+}

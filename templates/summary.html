@@ -1,0 +1,44 @@
+{% import "macros/refs.html" as refs %}
+{% extends "repo/base.html" %}
+
+{% block basic_nav %}
+ {% call super() %}
+    {% for diff in links %}
+        {% if diff.active %}
+            <a href="/{{ uri.display() }}/diff-beta?o={{diff.branch1}}&n={{diff.branch2}}" class="active">{{diff.branch1}}-{{diff.branch2}}</a>
+        {% else %}
+            <a href="/{{ uri.display() }}/diff-beta?o={{diff.branch1}}&n={{diff.branch2}}" class="diff_{{diff.branch1}}_{{diff.branch2}}_class">{{diff.branch1}}-{{diff.branch2}}</a>
+        {% endif %}
+
+    {% endfor %}
+{% endblock %}
+
+{% block summary_nav_class %}active{% endblock %}
+
+{% block content %}
+    <table class="repositories">
+        {% call refs::branch_table(refs.heads.iter()) %}
+
+        {%- if !refs.tags.is_empty() -%}
+        <tbody>
+        <tr class="separator">
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+        </tr>
+        {%- call refs::tag_table(refs.tags.iter().take(20)) -%}
+        </tbody>
+        {%- endif -%}
+
+        <tbody>
+        <tr class="separator">
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+        </tr>
+        </tbody>
+
+    </table>
+{% endblock %}

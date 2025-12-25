@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width">
+    <title>{% block title %}Gitx {% endblock %} </title>
+    <link rel="stylesheet" type="text/css" href="/statics/style.css?v=1.1.2" />
+
+</head>
+
+<body>
+<header>
+    <h1>
+        <a href="/" class="no-hover">🏡</a>
+        {% block header %}Git repository browser {% endblock %}
+    </h1>
+</header>
+
+{%- block nav -%}
+<nav>
+    <a href="/" class="active">index</a>
+</nav>
+{%- endblock -%}
+
+<main>
+    {%- block content %}{% endblock -%}
+</main>
+
+<footer>
+    {% let utc = time::OffsetDateTime::now_utc() %}
+    {% let utc_east = utc.to_offset( time::UtcOffset::from_hms(8, 0, 0).unwrap()) %}
+    fresh at {{ utc_east.to_string() }}
+</footer>
+
+</body>
+</html>

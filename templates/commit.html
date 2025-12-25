@@ -1,0 +1,53 @@
+{% extends "repo/base.html" %}
+
+{% block head %}
+<link rel="stylesheet" type="text/css" href="/statics/highlight.css" />
+<link rel="stylesheet" type="text/css" href="/statics/highlight-dark.css" />
+{%- endblock %}
+
+{% block basic_nav %}
+    {% call super() %}
+    {% for diff in links %}
+        <a href="/{{ uri.display() }}/diff-beta?o={{diff.branch1}}&n={{diff.branch2}}" class="diff_{{diff.branch1}}_{{diff.branch2}}_class">{{diff.branch1}}-{{diff.branch2}}</a>
+    {% endfor %}
+{% endblock %}
+
+{% block commit_nav_class %}active{% endblock %}
+
+{% block content %}
+<table class="commit-info">
+    <tbody>
+    <tr>
+        <th>author</th>
+        <td>{{ commit.author().name() }} &lt;{{ commit.author().email() }}&gt;</td>
+        <td>{{ commit.author().time() }}</td>
+    </tr>
+    <tr>
+        <th>committer</th>
+        <td>{{ commit.committer().name() }} &lt;{{ commit.committer().email() }}&gt;</td>
+        <td>{{ commit.committer().time() }}</td>
+    </tr>
+    <tr>
+        <th>commit</th>
+        <td colspan="2"><pre><a href="/{{ uri.display() }}/commit?id={{ commit.oid() }}" class="no-style">{{ commit.oid() }}</a><a href="/{{ uri.display() }}/patch?id={{ commit.oid() }}">[patch]</a></pre></td>
+    </tr>
+    <tr>
+        <th>tree</th>
+        <td colspan="2"><pre>{{ commit.tree() }}</pre></td>
+    </tr>
+    {%- for parent in commit.parents() %}
+    <tr>
+        <th>parent</th>
+        <td colspan="2"><pre><a href="/{{ uri.display() }}/commit?id={{ parent }}" class="no-style">{{ parent }}</a></pre></td>
+    </tr>
+    {%- endfor %}
+    </tbody>
+</table>
+
+<h2>{{ commit.summary() }}</h2>
+<pre>{{ commit.body() }}</pre>
+
+<h3>Diff</h3>
+<pre class="diff">{{ commit.diff_stats|safe }}
+{{ commit.diff|safe }}</pre>
+{% endblock %}

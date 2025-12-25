@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ repo_name }} - Log</title>
+    <link rel="stylesheet" href="/statics/style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="/">index</a> : {{ repo_name }}</h1>
+    </header>
+    <nav>
+        <a href="/{{ repo_name }}/summary">summary</a>
+        <a href="/{{ repo_name }}/log" class="active">log</a>
+        <a href="/{{ repo_name }}/commit">commit</a>
+        {% for link in links %}
+        <a href="/{{ repo_name }}/diff-beta?o={{ link.from_branch }}&n={{ link.to_branch }}" {% if link.active %}class="active"{% endif %}>{{ link.name }}</a>
+        {% endfor %}
+    </nav>
+    <main>
+        <h2>Commit Log{% if let Some(br) = &branch %} - {{ br }}{% endif %}</h2>
+        <table class="repositories">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Commit</th>
+                    <th>Message</th>
+                    <th>Author</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for commit in commits %}
+                <tr>
+                    <td>{{ commit.committer_time }}</td>
+                    <td><a href="/{{ repo_name }}/commit?id={{ commit.sha }}">{{ commit.sha_short }}</a></td>
+                    <td>{{ commit.message }}</td>
+                    <td>{{ commit.author_name }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if has_more %}
+        <p><a href="?{% if let Some(br) = &branch %}br={{ br }}&{% endif %}ofs={{ next_offset }}">[next]</a></p>
+        {% endif %}
+    </main>
+</body>
+</html>

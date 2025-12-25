@@ -1,0 +1,51 @@
+[project-cat]
+lua.branches = [
+    "oversea=hw-beta-qa", "hw-beta-qa=hw-pre",
+    "hw-beta-qa=tw-beta", "tw-beta=hw-pre","hw-pre=tw", "tw-beta=tw",
+    "tw-beta=kr-beta","tw=kr","hw-beta-qa=kr-beta", "hw-beta-qa=kr",
+    "kr-beta=kr","kr=kr-beta","kr=kr-beta","hw-beta-qa=jp-beta",
+    "kr-beta=jp-beta","jp-beta=jp",  "hw-beta-qa=zm-beta","hw-beta-qa=zm",
+    "kr-beta=zm-beta","zm-beta=zm", "kr-beta=cn-beta","hw-beta-qa=cn-beta", "cn-beta=cn",
+    "jp=sea-beta", "jp-beta=sea-beta", "hw-beta-qa=sea-beta",
+]
+setting.branches = [
+    "oversea=hw-beta-qa", "hw-beta-qa=hw-pre", "hw-beta-qa=tw-beta", "tw-beta=hw-pre","hw-pre=tw", "tw-beta=tw","tw-beta=kr-beta","tw=kr","hw-beta-qa=kr-beta", "hw-beta-qa=kr","kr-beta=kr",
+    "kr=kr-beta","kr=kr-beta","hw-beta-qa=jp-beta", "kr-beta=jp-beta","jp-beta=jp",
+    "hw-beta-qa=zm-beta","hw-beta-qa=zm", "kr-beta=zm-beta","zm-beta=zm", "kr-beta=cn-beta","hw-beta-qa=cn-beta", "cn-beta=cn",
+    "jp=sea-beta", "jp-beta=sea-beta", "hw-beta-qa=sea-beta",
+]
+project.branches = [
+    "oversea=hw-beta-qa", "hw-beta-qa=tw-beta","hw-pre=tw-beta", "tw-beta=hw-pre",
+    "tw-beta=tw","tw-beta=kr-beta","tw=kr","hw-beta-qa=kr-beta", "hw-beta-qa=kr","kr-beta=kr","kr=kr-beta","hw-beta-qa=jp-beta",
+    "kr-beta=jp-beta","jp-beta=jp", "hw-beta-qa=zm-beta","hw-beta-qa=zm", "kr-beta=zm-beta","zm-beta=zm",
+    "kr-beta=cn-beta","hw-beta-qa=cn-beta", "cn-beta=cn",
+    "jp=sea-beta", "jp-beta=sea-beta", "hw-beta-qa=sea-beta",
+]
+[project-server]
+project.branches = []
+
+[project-meow]
+lua.branches = [
+    "oversea=hw-beta-qa", "hw-beta-qa=hw-pre",
+    "hw-beta-qa=tw-beta", "tw-beta=hw-pre","hw-pre=tw", "tw-beta=tw",
+]
+setting.branches = [
+    "oversea=hw-beta-qa", "hw-beta-qa=hw-pre", "hw-beta-qa=tw-beta", "tw-beta=hw-pre",
+]
+project.branches = [
+    "oversea=hw-beta-qa", "hw-beta-qa=tw-beta","hw-pre=tw-beta", "tw-beta=hw-pre",
+]
+
+[project-tio]
+lua.branches = [
+    "main=beta", "beta=cn", "beta=cn-review", "cn=oversea", "oversea=oversea-beta", "main=gio-beta", "gio-beta=gio"
+]
+setting.branches = [
+    "master=beta", "beta=cn", "beta=cn-review","cn=oversea", "oversea=oversea-beta", "main=gio-beta", "gio-beta=gio"
+]
+server.branches = [
+    "dev=beta", "beta=cn", "beta=cn-review","cn=oversea", "oversea=oversea-beta", "main=gio-beta", "gio-beta=gio"
+]
+project.branches = [
+    "main=beta", "beta=cn", "beta=cn-review","cn=oversea", "oversea=oversea-beta", "main=gio-beta", "gio-beta=gio"
+]

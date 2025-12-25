@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ repo_name }} - Commit</title>
+    <link rel="stylesheet" href="/statics/style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="/">index</a> : {{ repo_name }}</h1>
+    </header>
+    <nav>
+        <a href="/{{ repo_name }}/summary">summary</a>
+        <a href="/{{ repo_name }}/log">log</a>
+        <a href="/{{ repo_name }}/commit" class="active">commit</a>
+        {% for link in links %}
+        <a href="/{{ repo_name }}/diff-beta?o={{ link.from_branch }}&n={{ link.to_branch }}" {% if link.active %}class="active"{% endif %}>{{ link.name }}</a>
+        {% endfor %}
+    </nav>
+    <main>
+        <h2>Commit {{ commit.sha[..8] }}</h2>
+        <table class="commit-info">
+            <tr><th>Author</th><td>{{ commit.author_name }} &lt;{{ commit.author_email }}&gt;</td><td>{{ commit.author_time }}</td></tr>
+            <tr><th>Committer</th><td>{{ commit.committer_name }} &lt;{{ commit.committer_email }}&gt;</td><td>{{ commit.committer_time }}</td></tr>
+            <tr><th>Commit</th><td colspan="2">{{ commit.sha }}</td></tr>
+            <tr><th>Tree</th><td colspan="2">{{ commit.tree }}</td></tr>
+            {% for parent in commit.parents %}
+            <tr><th>Parent</th><td colspan="2"><a href="?id={{ parent }}">{{ parent }}</a></td></tr>
+            {% endfor %}
+        </table>
+        <h3>Message</h3>
+        <pre>{{ commit.message }}</pre>
+    </main>
+</body>
+</html>

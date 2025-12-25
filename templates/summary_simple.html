@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ repo_name }} - Summary</title>
+    <link rel="stylesheet" href="/statics/style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="/">index</a> : {{ repo_name }}</h1>
+    </header>
+    <nav>
+        <a href="/{{ repo_name }}/summary" class="active">summary</a>
+        <a href="/{{ repo_name }}/log">log</a>
+        <a href="/{{ repo_name }}/commit">commit</a>
+        {% for link in links %}
+        <a href="/{{ repo_name }}/diff-beta?o={{ link.from_branch }}&n={{ link.to_branch }}" {% if link.active %}class="active"{% endif %}>{{ link.name }}</a>
+        {% endfor %}
+    </nav>
+    <main>
+        <h2>Repository: {{ repo_name }}</h2>
+        <p>Path: {{ repo_path }}</p>
+        
+        <h3>Branches</h3>
+        <table class="repositories">
+            <thead>
+                <tr>
+                    <th>Branch</th>
+                    <th>Commit</th>
+                    <th>Message</th>
+                    <th>Author</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for branch in branches %}
+                <tr>
+                    <td><a href="/{{ repo_name }}/log?br={{ branch.name }}">{{ branch.name }}</a></td>
+                    <td><a href="/{{ repo_name }}/commit?id={{ branch.commit_sha }}">{{ branch.commit_sha[..8] }}</a></td>
+                    <td>{{ branch.commit_message }}</td>
+                    <td>{{ branch.author }}</td>
+                    <td>{{ branch.time }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </main>
+</body>
+</html>

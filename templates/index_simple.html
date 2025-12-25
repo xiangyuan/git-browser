@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GitX - Repositories</title>
+    <link rel="stylesheet" href="/statics/style.css">
+</head>
+<body>
+    <header>
+        <h1>🏡 Git Repository Browser</h1>
+    </header>
+    <nav>
+        <a href="/" class="active">index</a>
+    </nav>
+    <main>
+        <table class="repositories">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Path</th>
+                    <th>Last Modified</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for repo in repositories %}
+                <tr>
+                    <td><a href="/{{ repo.name }}/summary">{{ repo.name }}</a></td>
+                    <td>{% if let Some(desc) = &repo.description %}{{ desc }}{% else %}N/A{% endif %}</td>
+                    <td>{{ repo.path }}</td>
+                    <td>{{ repo.last_modified }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </main>
+</body>
+</html>
