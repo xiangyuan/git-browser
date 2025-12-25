@@ -196,8 +196,9 @@ pub async fn repo_diff(
         .await?
         .ok_or_else(|| crate::shared::error::GitxError::RepositoryNotFound(repo_name.clone()))?;
     
+    // 使用新的find_diff_commits方法获取两个分支之间的差异commits
     let commits = ctx.commit_store
-        .list_by_repository(repo.id, Some(&query.n), 100i64, 0i64)
+        .find_diff_commits(repo.id, &query.o, &query.n, 100i64)
         .await?;
     
     let commit_items: Vec<CommitItem> = commits
@@ -206,7 +207,7 @@ pub async fn repo_diff(
             sha: c.oid.clone(),
             sha_short: c.oid[..8.min(c.oid.len())].to_string(),
             message: c.message.as_ref().and_then(|m| m.lines().next()).unwrap_or("").to_string(),
-            summary: c.message.as_ref().and_then(|m| m.lines().next()).unwrap_or("").to_string(),
+            summary: c.summary.to_string(),
             author_name: c.author_name.clone(),
             author_email: c.author_email.clone(),
             committer_time: c.committer_time.format("%Y-%m-%d %H:%M:%S").to_string(),

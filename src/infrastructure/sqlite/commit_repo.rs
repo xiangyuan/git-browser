@@ -269,4 +269,58 @@ impl CommitPort for SqliteCommitRepository {
 
         Ok(count)
     }
+    
+    async fn find_diff_commits(
+        &self,
+        repository_id: i64,
+        old_branch: &str,
+        new_branch: &str,
+        limit: i64,
+    ) -> Result<Vec<Commit>> {
+        // 查找在new_branch但不在old_branch的commits
+        let rows = sqlx::query(
+            r#"
+            SELECT DISTINCT c.id, c.repository_id, c.oid, c.branch,
+                   c.author_name, c.author_email, c.author_time,
+                   c.committer_name, c.committer_email, c.committer_time,
+                   c.summary, c.message, c.parent_oids, c.created_at
+            FROM commits c
+            WHERE c.repository_id = ? 
+              AND c.branch = ?
+              AND c.oid NOT IN (
+                  SELECT oid FROM commits 
+                  WHERE repository_id = ? AND branch = ?
+              )
+            ORDER BY c.committer_time DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(repository_id)
+        .bind(new_branch)
+        .bind(repository_id)
+        .bind(old_branch)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| Commit {
+                id: r.get("id"),
+                repository_id: r.get("repository_id"),
+                oid: r.get("oid"),
+                branch: r.get("branch"),
+                author_name: r.get("author_name"),
+                author_email: r.get("author_email"),
+                author_time: DateTime::from_timestamp(r.get("author_time"), 0).unwrap(),
+                committer_name: r.get("committer_name"),
+                committer_email: r.get("committer_email"),
+                committer_time: DateTime::from_timestamp(r.get("committer_time"), 0).unwrap(),
+                summary: r.get("summary"),
+                message: r.get("message"),
+                parent_oids: r.get("parent_oids"),
+                created_at: DateTime::from_timestamp(r.get("created_at"), 0).unwrap(),
+            })
+            .collect())
+    }
 }

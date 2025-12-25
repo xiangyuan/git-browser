@@ -18,27 +18,36 @@
         {% endfor %}
     </nav>
     <main>
-        <h2>Comparing {{ from_branch }} → {{ to_branch }}</h2>
+        <h2>Comparing {{ from_branch }} ... {{ to_branch }}</h2>
+        {% if commits.is_empty() %}
+        <p class="no-diff" style="padding: 2em; text-align: center; color: #28a745;">
+            ✓ No differences - branches are in sync
+        </p>
+        {% else %}
+        <p style="padding: 0.5em; background: #f6f8fa; border-left: 3px solid #0366d6;">
+            Showing <strong>{{ commits.len() }}</strong> commits in <code>{{ to_branch }}</code> that are not in <code>{{ from_branch }}</code>
+        </p>
         <table class="repositories">
             <thead>
                 <tr>
                     <th>Time</th>
-                    <th>Commit</th>
                     <th>Message</th>
                     <th>Author</th>
+                    <th>Hash</th>
                 </tr>
             </thead>
             <tbody>
                 {% for commit in commits %}
                 <tr>
                     <td>{{ commit.committer_time }}</td>
-                    <td><a href="/{{ repo_name }}/commit?id={{ commit.sha }}">{{ commit.sha_short }}</a></td>
-                    <td>{{ commit.message }}</td>
+                    <td><a href="/{{ repo_name }}/commit?id={{ commit.sha }}">{{ commit.summary }}</a></td>
                     <td>{{ commit.author_name }}</td>
+                    <td><a href="/{{ repo_name }}/commit?id={{ commit.sha }}">{{ commit.sha_short }}</a></td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+        {% endif %}
     </main>
 </body>
 </html>

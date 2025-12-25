@@ -35,4 +35,13 @@ pub trait CommitPort: Send + Sync {
 
     /// 统计提交数量
     async fn count_by_repository(&self, repository_id: i64, branch: Option<&str>) -> Result<i64>;
+    
+    /// 获取两个分支之间的差异commits（在new_branch但不在old_branch的commits）
+    async fn find_diff_commits(
+        &self,
+        repository_id: i64,
+        old_branch: &str,
+        new_branch: &str,
+        limit: i64,
+    ) -> Result<Vec<Commit>>;
 }
