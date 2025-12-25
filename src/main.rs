@@ -20,6 +20,7 @@ use shared::result::Result;
 use infrastructure::git::Git2Client;
 use infrastructure::sqlite::repository_repo::SqliteRepositoryRepository;
 use infrastructure::sqlite::commit_repo::SqliteCommitRepository;
+use infrastructure::sqlite::branch_repo::SqliteBranchRepository;
 use infrastructure::cache::MokaCache;
 use presentation::routes::AppContext;
 
@@ -79,6 +80,7 @@ async fn main() -> Result<()> {
     // 创建新架构的应用上下文
     let repository_store = Arc::new(SqliteRepositoryRepository::new(sqlite_pool.clone()));
     let commit_store = Arc::new(SqliteCommitRepository::new(sqlite_pool.clone()));
+    let branch_store = Arc::new(SqliteBranchRepository::new(sqlite_pool.clone()));
     let git_client = Arc::new(Git2Client::new());
     let cache = Arc::new(MokaCache::new(
         config.cache.max_capacity,
@@ -88,6 +90,7 @@ async fn main() -> Result<()> {
     let app_context = Arc::new(AppContext {
         repository_store: repository_store.clone(),
         commit_store: commit_store.clone(),
+        branch_store: branch_store.clone(),
         git_client: git_client.clone(),
         cache,
         config: config.clone(),
@@ -97,6 +100,8 @@ async fn main() -> Result<()> {
     let scheduler = Arc::new(services::scheduler::IndexerScheduler::new(
         config.clone(),
         repository_store.clone(),
+        commit_store.clone(),
+        branch_store.clone(),
         git_client.clone(),
     ));
     

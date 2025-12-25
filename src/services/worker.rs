@@ -2,8 +2,10 @@ use std::path::Path;
 use std::sync::Arc;
 use chrono::DateTime;
 use tracing::{info, debug, error};
-use crate::domain::entities::Commit;
+use crate::domain::entities::{Commit, Branch};
 use crate::ports::repository::RepositoryPort;
+use crate::ports::commit::CommitPort;
+use crate::ports::branch::BranchPort;
 use crate::ports::git::GitPort;
 use crate::shared::config::Config;
 use crate::shared::result::Result;
@@ -13,6 +15,8 @@ pub struct IndexWorker {
     config: Arc<Config>,
     #[allow(dead_code)]  // 后续功能会使用
     repository_store: Arc<dyn RepositoryPort>,
+    commit_store: Arc<dyn CommitPort>,
+    branch_store: Arc<dyn BranchPort>,
     git_client: Arc<dyn GitPort>,
 }
 
@@ -20,11 +24,15 @@ impl IndexWorker {
     pub fn new(
         config: Arc<Config>,
         repository_store: Arc<dyn RepositoryPort>,
+        commit_store: Arc<dyn CommitPort>,
+        branch_store: Arc<dyn BranchPort>,
         git_client: Arc<dyn GitPort>,
     ) -> Self {
         Self {
             config,
             repository_store,
+            commit_store,
+            branch_store,
             git_client,
         }
     }
@@ -38,15 +46,37 @@ impl IndexWorker {
         
         info!("Found {} branches to index", branches.len());
 
+        // 将分支信息转换为实体并保存到数据库
+        let branch_entities: Vec<Branch> = branches
+            .iter()
+            .map(|b| Branch {
+                id: 0, // 由数据库生成
+                repository_id,
+                name: b.name.clone(),
+                target_oid: b.target_oid.clone(),
+                is_default: b.is_head,
+                updated_at: chrono::Utc::now(),
+            })
+            .collect();
+
+        if !branch_entities.is_empty() {
+            self.branch_store.save_many(&branch_entities).await?;
+            info!("Saved {} branches to database", branch_entities.len());
+        }
+
         for branch in branches {
-            // 只索引 remote 分支
-            if !branch.name.starts_with("refs/remotes/origin/") {
+            // 只索引 remote 分支（格式如 origin/main）
+            if !branch.name.starts_with("origin/") {
                 continue;
             }
 
             debug!("Indexing branch: {}", branch.name);
 
-            match self.index_branch(repository_id, path, &branch.name).await {
+            // 构建完整的 ref 路径用于 get_commits
+            let ref_name = format!("refs/remotes/{}", branch.name);
+            
+            // 但存储时使用简短名称（origin/main）
+            match self.index_branch(repository_id, path, &ref_name, &branch.name).await {
                 Ok(count) => {
                     result.commits_indexed += count;
                     result.branches_indexed += 1;
@@ -72,7 +102,8 @@ impl IndexWorker {
         &self,
         repository_id: i64,
         path: &Path,
-        branch: &str,
+        ref_name: &str,        // 完整ref路径，如 refs/remotes/origin/main
+        branch_name: &str,     // 简短名称，如 origin/main
     ) -> Result<usize> {
         // 这里需要 CommitPort，但我们还没有注入
         // 暂时返回 0，后续需要添加 commit_store
@@ -84,13 +115,13 @@ impl IndexWorker {
         // 获取新提交
         let commits = self.git_client.get_commits(
             path,
-            branch,
+            ref_name,  // 使用完整ref路径
             self.config.indexer.max_commits_per_branch,
             last_indexed_oid.as_deref(),
         ).await?;
 
         if commits.is_empty() {
-            debug!("No new commits for branch {}", branch);
+            debug!("No new commits for branch {}", branch_name);
             return Ok(0);
         }
 
@@ -101,7 +132,7 @@ impl IndexWorker {
                 Commit::new(
                     repository_id,
                     c.oid,
-                    branch.to_string(),
+                    branch_name.to_string(),  // 存储简短名称
                     c.author_name,
                     c.author_email,
                     DateTime::from_timestamp(c.author_time, 0).unwrap(),
@@ -117,10 +148,14 @@ impl IndexWorker {
 
         let count = domain_commits.len();
 
-        // TODO: 批量插入
-        // self.commit_store.bulk_insert(&domain_commits).await?;
+        // 批量插入commits到数据库
+        for commit in domain_commits {
+            if let Err(e) = self.commit_store.save(&commit).await {
+                error!("Failed to save commit {}: {}", commit.oid, e);
+            }
+        }
 
-        info!("Indexed {} commits for branch {}", count, branch);
+        info!("Indexed {} commits for branch {}", count, branch_name);
 
         Ok(count)
     }

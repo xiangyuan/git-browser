@@ -51,6 +51,7 @@ pub struct CommitItem {
     pub sha: String,
     pub sha_short: String,
     pub message: String,
+    pub summary: String,  // 为模板兼容性添加，与message相同
     pub author_name: String,
     pub author_email: String,
     pub committer_time: String,

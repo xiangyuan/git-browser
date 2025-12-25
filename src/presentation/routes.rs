@@ -7,6 +7,7 @@ use crate::infrastructure::cache::MokaCache;
 pub struct AppContext {
     pub repository_store: Arc<dyn crate::ports::repository::RepositoryPort>,
     pub commit_store: Arc<dyn crate::ports::commit::CommitPort>,
+    pub branch_store: Arc<dyn crate::ports::branch::BranchPort>,
     pub git_client: Arc<dyn crate::ports::git::GitPort>,
     #[allow(dead_code)]  // 后续功能会使用
     pub cache: Arc<MokaCache>,  // 使用具体类型

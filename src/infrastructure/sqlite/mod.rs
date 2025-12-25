@@ -1,5 +1,6 @@
 pub mod repository_repo;
 pub mod commit_repo;
+pub mod branch_repo;
 
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use std::path::Path;

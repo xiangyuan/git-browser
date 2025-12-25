@@ -3,6 +3,8 @@ use std::time::Duration;
 use tokio::time;
 use tracing::{info, error};
 use crate::ports::repository::RepositoryPort;
+use crate::ports::commit::CommitPort;
+use crate::ports::branch::BranchPort;
 use crate::ports::git::GitPort;
 use crate::shared::config::Config;
 use crate::shared::result::Result;
@@ -13,6 +15,8 @@ use crate::services::worker::IndexWorker;
 pub struct IndexerScheduler {
     config: Arc<Config>,
     repository_store: Arc<dyn RepositoryPort>,
+    commit_store: Arc<dyn CommitPort>,
+    branch_store: Arc<dyn BranchPort>,
     git_client: Arc<dyn GitPort>,
 }
 
@@ -20,11 +24,15 @@ impl IndexerScheduler {
     pub fn new(
         config: Arc<Config>,
         repository_store: Arc<dyn RepositoryPort>,
+        commit_store: Arc<dyn CommitPort>,
+        branch_store: Arc<dyn BranchPort>,
         git_client: Arc<dyn GitPort>,
     ) -> Self {
         Self {
             config,
             repository_store,
+            commit_store,
+            branch_store,
             git_client,
         }
     }
@@ -115,18 +123,28 @@ impl IndexerScheduler {
             self.repository_store.save(&new_repo).await?
         };
 
-        // 2. 同步仓库
+        // 2. 同步仓库（添加超时和错误处理）
         info!("Syncing repository: {}", repo_info.name);
-        match self.git_client.fetch_repository(&repo_info.path).await {
-            Ok(fetch_result) => {
+        
+        let fetch_timeout = Duration::from_secs(self.config.git.fetch_timeout_secs);
+        let fetch_result = tokio::time::timeout(
+            fetch_timeout,
+            self.git_client.fetch_repository(&repo_info.path)
+        ).await;
+        
+        match fetch_result {
+            Ok(Ok(result)) => {
                 info!(
                     "Repository synced: {} branches updated",
-                    fetch_result.branches_updated.len()
+                    result.branches_updated.len()
                 );
             }
-            Err(e) => {
-                error!("Failed to sync repository {}: {}", repo_info.name, e);
-                return Ok(false);
+            Ok(Err(e)) => {
+                error!("Failed to fetch repository {}: {}", repo_info.name, e);
+                info!("Continuing with local data...");
+            }
+            Err(_) => {
+                error!("Fetch timeout for repository {}, continuing with local data", repo_info.name);
             }
         }
 
@@ -134,6 +152,8 @@ impl IndexerScheduler {
         let worker = IndexWorker::new(
             Arc::clone(&self.config),
             Arc::clone(&self.repository_store),
+            Arc::clone(&self.commit_store),
+            Arc::clone(&self.branch_store),
             Arc::clone(&self.git_client),
         );
 
@@ -160,6 +180,8 @@ impl IndexerScheduler {
         let worker = IndexWorker::new(
             Arc::clone(&self.config),
             Arc::clone(&self.repository_store),
+            Arc::clone(&self.commit_store),
+            Arc::clone(&self.branch_store),
             Arc::clone(&self.git_client),
         );
 

@@ -23,18 +23,18 @@
             <thead>
                 <tr>
                     <th>Time</th>
-                    <th>Commit</th>
-                    <th>Message</th>
+                    <th>Commit message</th>
                     <th>Author</th>
+                    <th>Hash</th>
                 </tr>
             </thead>
             <tbody>
                 {% for commit in commits %}
                 <tr>
                     <td>{{ commit.committer_time }}</td>
-                    <td><a href="/{{ repo_name }}/commit?id={{ commit.sha }}">{{ commit.sha_short }}</a></td>
-                    <td>{{ commit.message }}</td>
+                    <td><a href="/{{ repo_name }}/commit?id={{ commit.sha }}">{{ commit.summary }}</a></td>
                     <td>{{ commit.author_name }}</td>
+                    <td>{{ commit.sha_short }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
