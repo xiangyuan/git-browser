@@ -1,0 +1,42 @@
+[server]
+bind_address = "0.0.0.0:8080"
+cors_origins = ["http://localhost:3000"]
+
+[database]
+sqlite_path = "gitx.db"
+max_connections = 10
+
+[git]
+fetch_timeout_secs = 300
+
+[indexer]
+enabled = true
+interval_secs = 300
+max_commits_per_branch = 4000
+worker_threads = 4
+
+[cache]
+max_capacity = 6000
+ttl_secs = 3600
+
+# 项目配置 - 明确指定每个git仓库的路径
+[[projects]]
+name = "tio-android"
+base_path = "/Users/boss/Develop/tio-android"
+scan_paths = [
+    ".",                    # tio-android 主仓库
+    "Product/Lua",         # lua 子仓库
+    "Product/SettingSourcePath",         # SettingSourcePath 子仓库
+    "Product/Server",      # server 子仓库
+    # 添加其他需要监控的仓库路径...
+]
+
+[[projects.branches]]
+name = "main→beta"
+from_branch = "origin/main"
+to_branch = "origin/beta"
+
+[[projects.branches]]
+name = "master→gio-beta"
+from_branch = "origin/main"
+to_branch = "origin/gio-beta"
