@@ -78,6 +78,8 @@ pub struct CommitDetail {
     pub committer_email: String,
     pub committer_time: String,
     pub message: String,
+    pub diff_stats: String,
+    pub diff: String,
 }
 
 /// 分支对比页

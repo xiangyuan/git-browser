@@ -149,10 +149,14 @@ pub async fn repo_commit(
         .await?
         .ok_or_else(|| crate::shared::error::GitxError::Internal(format!("Commit {} not found", query.id)))?;
     
+    // 从 git 获取完整的 commit detail（包含 diff）
+    let repo_path = std::path::PathBuf::from(&repo.path);
+    let git_detail = ctx.git_client.get_commit_detail(&repo_path, &query.id).await?;
+    
     let detail = CommitDetail {
         sha: commit.oid.clone(),
-        tree: "".to_string(),
-        parents: vec![],
+        tree: "".to_string(), // GitCommit没有tree_oid字段，暂时留空
+        parents: git_detail.commit.parent_oids.clone(),
         author_name: commit.author_name.clone(),
         author_email: commit.author_email.clone(),
         author_time: commit.author_time.format("%Y-%m-%d %H:%M:%S").to_string(),
@@ -160,6 +164,8 @@ pub async fn repo_commit(
         committer_email: commit.committer_email.clone(),
         committer_time: commit.committer_time.format("%Y-%m-%d %H:%M:%S").to_string(),
         message: commit.message.clone().unwrap_or_default(),
+        diff_stats: git_detail.diff_stats.clone(),
+        diff: git_detail.diff_html.clone(),
     };
     
     let links = get_diff_links(&ctx, &repo_name, None);

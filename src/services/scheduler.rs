@@ -83,16 +83,53 @@ impl IndexerScheduler {
 
         info!("Discovered {} repositories", stats.repos_discovered);
 
-        // 2. 为每个仓库执行索引
-        for repo_info in discovered_repos {
-            match self.index_repository(&repo_info).await {
-                Ok(indexed) => {
+        // 2. 并行为每个仓库执行索引
+        let repo_count = discovered_repos.len();
+        let tasks: Vec<_> = discovered_repos
+            .into_iter()
+            .enumerate()
+            .map(|(idx, repo_info)| {
+                let config = self.config.clone();
+                let repository_store = self.repository_store.clone();
+                let commit_store = self.commit_store.clone();
+                let branch_store = self.branch_store.clone();
+                let git_client = self.git_client.clone();
+                
+                tokio::spawn(async move {
+                    info!("[{}/{}] Starting to index: {}", idx + 1, repo_count, repo_info.name);
+                    
+                    // 创建临时scheduler实例来调用index_repository
+                    let temp_scheduler = IndexerScheduler {
+                        config,
+                        repository_store,
+                        commit_store,
+                        branch_store,
+                        git_client,
+                    };
+                    
+                    let result = temp_scheduler.index_repository(&repo_info).await;
+                    if let Ok(true) = result {
+                        info!("[{}/{}] ✓ Finished indexing: {}", idx + 1, repo_count, repo_info.name);
+                    }
+                    result
+                })
+            })
+            .collect();
+
+        // 等待所有任务完成
+        for task in tasks {
+            match task.await {
+                Ok(Ok(indexed)) => {
                     if indexed {
                         stats.repos_synced += 1;
                     }
                 }
+                Ok(Err(e)) => {
+                    error!("Failed to index repository: {}", e);
+                    stats.repos_failed += 1;
+                }
                 Err(e) => {
-                    error!("Failed to index repository {}: {}", repo_info.path.display(), e);
+                    error!("Task panicked: {}", e);
                     stats.repos_failed += 1;
                 }
             }

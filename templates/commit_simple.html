@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <title>{{ repo_name }} - Commit</title>
     <link rel="stylesheet" href="/statics/style.css">
+    <link rel="stylesheet" href="/statics/highlight.css">
+    <link rel="stylesheet" href="/statics/highlight-dark.css">
 </head>
 <body>
     <header>
@@ -30,6 +32,9 @@
         </table>
         <h3>Message</h3>
         <pre>{{ commit.message }}</pre>
+        <h3>Diff</h3>
+        <pre class="diff">{{ commit.diff_stats|safe }}
+{{ commit.diff|safe }}</pre>
     </main>
 </body>
 </html>

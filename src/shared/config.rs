@@ -76,7 +76,7 @@ impl Default for IndexerConfig {
         Self {
             enabled: true,
             interval_secs: 300,
-            max_commits_per_branch: 20000,
+            max_commits_per_branch: 2000,
             worker_threads: 4,
         }
     }

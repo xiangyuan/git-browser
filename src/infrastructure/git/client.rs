@@ -309,7 +309,7 @@ impl GitPort for Git2Client {
                 stats.deletions()
             );
             
-            // 生成 diff HTML（简化版）
+            // 生成 diff HTML（保持git格式）
             let mut diff_html = String::new();
             let mut diff_plain = Vec::new();
             
@@ -317,10 +317,17 @@ impl GitPort for Git2Client {
                 let content = String::from_utf8_lossy(line.content());
                 diff_plain.extend_from_slice(line.content());
                 
+                // HTML转义
+                let escaped = content
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;");
+                
                 match line.origin() {
-                    '+' => diff_html.push_str(&format!("<span class=\"add\">{}</span>", content)),
-                    '-' => diff_html.push_str(&format!("<span class=\"del\">{}</span>", content)),
-                    _ => diff_html.push_str(&content),
+                    '+' => diff_html.push_str(&format!("<span class=\"diff-add-line\">{}</span>", escaped)),
+                    '-' => diff_html.push_str(&format!("<span class=\"diff-remove-line\">{}</span>", escaped)),
+                    ' ' => diff_html.push_str(&format!("<span class=\"diff-context\"> {}</span>", escaped)),
+                    _ => diff_html.push_str(&escaped),
                 }
                 true
             })?;
