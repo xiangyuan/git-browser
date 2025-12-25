@@ -148,14 +148,16 @@ impl IndexWorker {
 
         let count = domain_commits.len();
 
-        // 批量插入commits到数据库
-        for commit in domain_commits {
-            if let Err(e) = self.commit_store.save(&commit).await {
-                error!("Failed to save commit {}: {}", commit.oid, e);
+        // 使用bulk_insert批量插入，比逐个save快很多
+        match self.commit_store.bulk_insert(&domain_commits).await {
+            Ok(inserted) => {
+                info!("Indexed {} commits for branch {}", inserted, branch_name);
+            }
+            Err(e) => {
+                error!("Failed to bulk insert commits: {}", e);
+                return Err(e);
             }
         }
-
-        info!("Indexed {} commits for branch {}", count, branch_name);
 
         Ok(count)
     }

@@ -161,15 +161,24 @@ impl CommitPort for SqliteCommitRepository {
     }
 
     async fn bulk_insert(&self, commits: &[Commit]) -> Result<usize> {
+        if commits.is_empty() {
+            return Ok(0);
+        }
+
         let mut tx = self.pool.begin().await?;
-        let mut count = 0;
+        let mut total_inserted = 0;
 
-        for commit in commits {
-            let author_time_ts = commit.author_time.timestamp();
-            let committer_time_ts = commit.committer_time.timestamp();
-            let created_ts = commit.created_at.timestamp();
+        // SQLite参数限制约999个，每个commit需要13个参数
+        // 所以每批最多插入 999/13 ≈ 76 条记录，保守使用50条
+        const BATCH_SIZE: usize = 50;
 
-            sqlx::query(
+        for chunk in commits.chunks(BATCH_SIZE) {
+            // 构建多值INSERT语句
+            let placeholders: Vec<String> = (0..chunk.len())
+                .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
+                .collect();
+            
+            let sql = format!(
                 r#"
                 INSERT INTO commits (
                     repository_id, oid, branch,
@@ -177,31 +186,42 @@ impl CommitPort for SqliteCommitRepository {
                     committer_name, committer_email, committer_time,
                     summary, message, parent_oids, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES {}
                 ON CONFLICT(repository_id, oid, branch) DO NOTHING
                 "#,
-            )
-            .bind(commit.repository_id)
-            .bind(&commit.oid)
-            .bind(&commit.branch)
-            .bind(&commit.author_name)
-            .bind(&commit.author_email)
-            .bind(author_time_ts)
-            .bind(&commit.committer_name)
-            .bind(&commit.committer_email)
-            .bind(committer_time_ts)
-            .bind(&commit.summary)
-            .bind(&commit.message)
-            .bind(&commit.parent_oids)
-            .bind(created_ts)
-            .execute(&mut *tx)
-            .await?;
+                placeholders.join(", ")
+            );
 
-            count += 1;
+            let mut query = sqlx::query(&sql);
+
+            // 绑定所有参数
+            for commit in chunk {
+                let author_time_ts = commit.author_time.timestamp();
+                let committer_time_ts = commit.committer_time.timestamp();
+                let created_ts = commit.created_at.timestamp();
+
+                query = query
+                    .bind(commit.repository_id)
+                    .bind(&commit.oid)
+                    .bind(&commit.branch)
+                    .bind(&commit.author_name)
+                    .bind(&commit.author_email)
+                    .bind(author_time_ts)
+                    .bind(&commit.committer_name)
+                    .bind(&commit.committer_email)
+                    .bind(committer_time_ts)
+                    .bind(&commit.summary)
+                    .bind(&commit.message)
+                    .bind(&commit.parent_oids)
+                    .bind(created_ts);
+            }
+
+            let result = query.execute(&mut *tx).await?;
+            total_inserted += result.rows_affected() as usize;
         }
 
         tx.commit().await?;
-        Ok(count)
+        Ok(total_inserted)
     }
 
     async fn save(&self, commit: &Commit) -> Result<i64> {

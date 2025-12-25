@@ -131,7 +131,7 @@ pub async fn repo_log(
 /// UI: 单个提交详情页 - 使用模板
 #[derive(Deserialize)]
 pub struct CommitQuery {
-    id: String,
+    id: Option<String>,
 }
 
 pub async fn repo_commit(
@@ -144,14 +144,64 @@ pub async fn repo_commit(
         .await?
         .ok_or_else(|| crate::shared::error::GitxError::RepositoryNotFound(repo_name.clone()))?;
     
+    // 如果没有指定commit id，显示默认分支的commit列表
+    if query.id.is_none() {
+        // 从branches表获取默认分支
+        let branches = ctx.branch_store
+            .find_by_repository(repo.id)
+            .await?;
+        
+        // 找到默认分支，或使用第一个分支
+        let default_branch_name = branches
+            .iter()
+            .find(|b| b.is_default)
+            .or_else(|| branches.first())
+            .map(|b| b.name.as_str())
+            .unwrap_or("origin/main");
+        
+        let limit = 50i64;
+        let commits = ctx.commit_store
+            .list_by_repository(repo.id, Some(default_branch_name), limit, 0)
+            .await?;
+        
+        let commit_items: Vec<CommitItem> = commits
+            .iter()
+            .map(|c| CommitItem {
+                sha: c.oid.clone(),
+                sha_short: c.oid[..8.min(c.oid.len())].to_string(),
+                message: c.message.as_ref().and_then(|m| m.lines().next()).unwrap_or("").to_string(),
+                summary: c.summary.clone(),
+                author_name: c.author_name.clone(),
+                author_email: c.author_email.clone(),
+                committer_time: c.committer_time.format("%Y-%m-%d %H:%M:%S").to_string(),
+            })
+            .collect();
+        
+        let links = get_diff_links(&ctx, &repo_name, None);
+        
+        let len = commit_items.len();
+        let template = LogTemplate {
+            repo_name: repo_name.clone(),
+            commits: commit_items,
+            branch: Some(default_branch_name.to_string()),
+            has_more: len >= limit as usize,
+            next_offset: limit as usize,
+            links,
+        };
+        
+        return Ok(Html(template.render()?));
+    }
+    
+    let commit_id = query.id.unwrap();
+    
     let commit = ctx.commit_store
-        .find_by_oid(repo.id, &query.id)
+        .find_by_oid(repo.id, &commit_id)
         .await?
-        .ok_or_else(|| crate::shared::error::GitxError::Internal(format!("Commit {} not found", query.id)))?;
+        .ok_or_else(|| crate::shared::error::GitxError::Internal(format!("Commit {} not found", commit_id)))?;
     
     // 从 git 获取完整的 commit detail（包含 diff）
     let repo_path = std::path::PathBuf::from(&repo.path);
-    let git_detail = ctx.git_client.get_commit_detail(&repo_path, &query.id).await?;
+    let git_detail = ctx.git_client.get_commit_detail(&repo_path, &commit_id).await?;
     
     let detail = CommitDetail {
         sha: commit.oid.clone(),
