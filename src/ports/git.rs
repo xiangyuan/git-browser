@@ -33,6 +33,16 @@ pub trait GitPort: Send + Sync {
         from_oid: &str,
         to_oid: &str,
     ) -> Result<GitDiff>;
+    
+    /// 获取两个分支之间的差异commits（类似 git log old_branch..new_branch）
+    /// 返回在new_branch但不在old_branch的commits
+    async fn get_branch_diff_commits(
+        &self,
+        path: &Path,
+        old_branch: &str,
+        new_branch: &str,
+        limit: usize,
+    ) -> Result<Vec<GitCommit>>;
 }
 
 /// Fetch 操作结果

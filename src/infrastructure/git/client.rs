@@ -401,4 +401,74 @@ impl GitPort for Git2Client {
         })
         .await
     }
+    
+    async fn get_branch_diff_commits(
+        &self,
+        path: &Path,
+        old_branch: &str,
+        new_branch: &str,
+        limit: usize,
+    ) -> Result<Vec<GitCommit>> {
+        let path = path.to_path_buf();
+        let old_branch = old_branch.to_string();
+        let new_branch = new_branch.to_string();
+        
+        Self::run_blocking(move || {
+            use std::process::Command;
+            
+            // 直接使用git命令行，确保行为一致
+            // git log old_branch..new_branch --oneline --no-merges --format=%H
+            let output = Command::new("git")
+                .current_dir(&path)
+                .args(&[
+                    "log",
+                    &format!("{}..{}", old_branch, new_branch),
+                    "--no-merges",
+                    &format!("-{}", limit),
+                    "--format=%H",
+                ])
+                .output()
+                .map_err(|e| GitxError::Internal(format!("Failed to run git command: {}", e)))?;
+            
+            if !output.status.success() {
+                return Err(GitxError::Internal(format!(
+                    "Git command failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                )));
+            }
+            
+            let oids_str = String::from_utf8_lossy(&output.stdout);
+            let repo = Repository::open(&path)?;
+            let mut commits = Vec::new();
+            
+            for line in oids_str.lines() {
+                let oid_str = line.trim();
+                if oid_str.is_empty() {
+                    continue;
+                }
+                
+                let oid = Oid::from_str(oid_str)?;
+                let commit = repo.find_commit(oid)?;
+                
+                let author = commit.author();
+                let committer = commit.committer();
+                
+                commits.push(GitCommit {
+                    oid: commit.id().to_string(),
+                    author_name: String::from_utf8_lossy(author.name_bytes()).to_string(),
+                    author_email: String::from_utf8_lossy(author.email_bytes()).to_string(),
+                    author_time: author.when().seconds(),
+                    committer_name: String::from_utf8_lossy(committer.name_bytes()).to_string(),
+                    committer_email: String::from_utf8_lossy(committer.email_bytes()).to_string(),
+                    committer_time: committer.when().seconds(),
+                    summary: commit.summary().unwrap_or("").to_string(),
+                    message: commit.body().map(String::from),
+                    parent_oids: commit.parent_ids().map(|id| id.to_string()).collect(),
+                });
+            }
+            
+            Ok(commits)
+        })
+        .await
+    }
 }

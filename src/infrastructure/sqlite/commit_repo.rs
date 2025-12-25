@@ -277,25 +277,28 @@ impl CommitPort for SqliteCommitRepository {
         new_branch: &str,
         limit: i64,
     ) -> Result<Vec<Commit>> {
-        // 查找在new_branch但不在old_branch的commits
+        // 查找在old_branch但不在new_branch的commits（老分支特有的commits）
+        // 通过 (author_name, summary, committer_time) 组合来识别相同的逻辑commit
+        // 使用 LEFT JOIN + IS NULL 代替 NOT EXISTS，性能更好
         let rows = sqlx::query(
             r#"
-            SELECT DISTINCT c.id, c.repository_id, c.oid, c.branch,
+            SELECT c.id, c.repository_id, c.oid, c.branch,
                    c.author_name, c.author_email, c.author_time,
                    c.committer_name, c.committer_email, c.committer_time,
                    c.summary, c.message, c.parent_oids, c.created_at
             FROM commits c
+            LEFT JOIN commits new ON 
+                new.repository_id = c.repository_id
+                AND new.branch = ?
+                AND new.author_name = c.author_name
+                AND new.summary = c.summary
             WHERE c.repository_id = ? 
               AND c.branch = ?
-              AND c.oid NOT IN (
-                  SELECT oid FROM commits 
-                  WHERE repository_id = ? AND branch = ?
-              )
+              AND new.id IS NULL
             ORDER BY c.committer_time DESC
             LIMIT ?
             "#,
         )
-        .bind(repository_id)
         .bind(new_branch)
         .bind(repository_id)
         .bind(old_branch)

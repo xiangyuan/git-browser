@@ -196,9 +196,11 @@ pub async fn repo_diff(
         .await?
         .ok_or_else(|| crate::shared::error::GitxError::RepositoryNotFound(repo_name.clone()))?;
     
-    // 使用新的find_diff_commits方法获取两个分支之间的差异commits
+    // 使用数据库中已索引的commits进行对比
+    // 通过 author_name + summary + committer_time 识别相同的逻辑commit
+    // 这样可以正确处理cherry-pick的情况
     let commits = ctx.commit_store
-        .find_diff_commits(repo.id, &query.o, &query.n, 100i64)
+        .find_diff_commits(repo.id, &query.o, &query.n, 1000)
         .await?;
     
     let commit_items: Vec<CommitItem> = commits
@@ -206,8 +208,8 @@ pub async fn repo_diff(
         .map(|c| CommitItem {
             sha: c.oid.clone(),
             sha_short: c.oid[..8.min(c.oid.len())].to_string(),
-            message: c.message.as_ref().and_then(|m| m.lines().next()).unwrap_or("").to_string(),
-            summary: c.summary.to_string(),
+            message: c.summary.clone(),
+            summary: c.summary.clone(),
             author_name: c.author_name.clone(),
             author_email: c.author_email.clone(),
             committer_time: c.committer_time.format("%Y-%m-%d %H:%M:%S").to_string(),

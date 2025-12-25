@@ -18,14 +18,26 @@
         {% endfor %}
     </nav>
     <main>
-        <h2>Comparing {{ from_branch }} ... {{ to_branch }}</h2>
+        <h2>Branch Comparison</h2>
+        <div style="padding: 1em; background: #f6f8fa; border-radius: 4px; margin-bottom: 1em;">
+            <p style="margin: 0;">
+                <strong>Base:</strong> <code>{{ from_branch }}</code> (old branch)<br>
+                <strong>Compare:</strong> <code>{{ to_branch }}</code> (new branch)<br>
+                <em>Showing commits in {{ from_branch }} that are NOT in {{ to_branch }}</em>
+            </p>
+            <p style="margin: 0.5em 0 0 0;">
+                <a href="/{{ repo_name }}/diff-beta?o={{ from_branch }}&n={{ to_branch }}" style="font-size: 0.9em;">
+                    ⇄  comparison ({{ from_branch }} ← {{ to_branch }})
+                </a>
+            </p>
+        </div>
         {% if commits.is_empty() %}
         <p class="no-diff" style="padding: 2em; text-align: center; color: #28a745;">
-            ✓ No differences - branches are in sync
+            ✓ No new commits in {{ to_branch }} - branches are in sync or {{ from_branch }} is ahead
         </p>
         {% else %}
-        <p style="padding: 0.5em; background: #f6f8fa; border-left: 3px solid #0366d6;">
-            Showing <strong>{{ commits.len() }}</strong> commits in <code>{{ to_branch }}</code> that are not in <code>{{ from_branch }}</code>
+        <p style="padding: 0.5em; background: #fff3cd; border-left: 3px solid #ffc107;">
+            Found <strong>{{ commits.len() }}</strong> commits
         </p>
         <table class="repositories">
             <thead>
