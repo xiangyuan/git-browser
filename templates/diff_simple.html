@@ -9,6 +9,27 @@
     <header>
         <h1><a href="/">index</a> : {{ repo_name }}</h1>
     </header>
+    
+    <!-- Global Branch Comparison Selector -->
+    <div style="margin: 0; padding: 12px 20px; background: linear-gradient(to bottom, #f6f8fa 0%, #eef1f5 100%); border-bottom: 2px solid #d0d7de; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+        <form method="get" style="display: flex; gap: 12px; align-items: center; max-width: 1200px; margin: 0 auto;">
+            <span style="font-weight: 600; color: #24292f; font-size: 14px; white-space: nowrap;">🔀 Compare branches:</span>
+            <select id="from-branch" name="o" style="padding: 6px 12px; border: 1px solid #d0d7de; border-radius: 6px; background: white; font-size: 14px; cursor: pointer; min-width: 180px; transition: all 0.2s;">
+                {% for branch in branches %}
+                <option value="{{ branch }}" {% if branch.as_str() == from_branch %}selected{% endif %}>{{ branch }}</option>
+                {% endfor %}
+            </select>
+            <span style="color: #57606a; font-weight: 500;">→</span>
+            <select id="to-branch" name="n" style="padding: 6px 12px; border: 1px solid #d0d7de; border-radius: 6px; background: white; font-size: 14px; cursor: pointer; min-width: 180px; transition: all 0.2s;">
+                {% for branch in branches %}
+                <option value="{{ branch }}" {% if branch.as_str() == to_branch %}selected{% endif %}>{{ branch }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" style="padding: 6px 20px; background: linear-gradient(to bottom, #2ea44f 0%, #2a8f46 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; box-shadow: 0 1px 3px rgba(27,31,36,0.12); transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 6px rgba(27,31,36,0.15)'" onmouseout="this.style.transform=''; this.style.boxShadow='0 1px 3px rgba(27,31,36,0.12)'">Compare</button>
+            <button type="button" onclick="swapBranches()" style="padding: 6px 12px; background: white; color: #0969da; border: 1px solid #d0d7de; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='white'">⇄ Swap</button>
+        </form>
+    </div>
+    
     <nav>
         <a href="/{{ repo_name }}/summary">summary</a>
         <a href="/{{ repo_name }}/log">log</a>
@@ -18,30 +39,26 @@
         {% endfor %}
     </nav>
     <main>
-        <h2>Branch Comparison</h2>
-        <div style="padding: 1em; background: #f6f8fa; border-radius: 4px; margin-bottom: 1em;">
-            <p style="margin: 0;">
-                <strong>Base:</strong> <code>{{ from_branch }}</code> (old branch)<br>
-                <strong>Compare:</strong> <code>{{ to_branch }}</code> (new branch)<br>
-                <em>Showing commits in {{ from_branch }} that are NOT in {{ to_branch }}</em>
-            </p>
-            <p style="margin: 0.5em 0 0 0;">
-                <a href="/{{ repo_name }}/diff-beta?o={{ from_branch }}&n={{ to_branch }}" style="font-size: 0.9em;">
-                    ⇄  comparison ({{ from_branch }} ← {{ to_branch }})
-                </a>
-            </p>
-        </div>
+        <h2>Branch Comparison: {{ from_branch }} → {{ to_branch }}</h2>
+        <p style="margin: 1em 0; font-size: 0.9em; color: #57606a;">
+            <em>Showing commits in <code>{{ from_branch }}</code> that are NOT in <code>{{ to_branch }}</code></em>
+        </p>
+        
         {% if commits.is_empty() %}
         <p class="no-diff" style="padding: 2em; text-align: center; color: #28a745;">
             ✓ No new commits in {{ to_branch }} - branches are in sync or {{ from_branch }} is ahead
         </p>
         {% else %}
-        <p style="padding: 0.5em; background: #fff3cd; border-left: 3px solid #ffc107;">
-            Found <strong>{{ commits.len() }}</strong> commits
-        </p>
+        <div style="padding: 0.5em; background: #fff3cd; border-left: 3px solid #ffc107; margin-bottom: 1em; display: flex; justify-content: space-between; align-items: center;">
+            <span>Found <strong>{{ commits.len() }}</strong> commits</span>
+            <button onclick="cherryPickSelected()" style="padding: 0.5em 1em; background: #0969da; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                🍒 Cherry-pick Selected
+            </button>
+        </div>
         <table class="repositories">
             <thead>
                 <tr>
+                    <th><input type="checkbox" id="select-all" onclick="toggleAll(this)"></th>
                     <th>Time</th>
                     <th>Message</th>
                     <th>Author</th>
@@ -51,6 +68,7 @@
             <tbody>
                 {% for commit in commits %}
                 <tr>
+                    <td><input type="checkbox" class="commit-checkbox" value="{{ commit.sha }}"></td>
                     <td>{{ commit.committer_time }}</td>
                     <td><a href="/{{ repo_name }}/commit?id={{ commit.sha }}">{{ commit.summary }}</a></td>
                     <td>{{ commit.author_name }}</td>
@@ -61,5 +79,58 @@
         </table>
         {% endif %}
     </main>
+    
+    <script>
+    function swapBranches() {
+        const fromSelect = document.getElementById('from-branch');
+        const toSelect = document.getElementById('to-branch');
+        const temp = fromSelect.value;
+        fromSelect.value = toSelect.value;
+        toSelect.value = temp;
+        fromSelect.form.submit();
+    }
+    
+    function toggleAll(checkbox) {
+        const checkboxes = document.querySelectorAll('.commit-checkbox');
+        checkboxes.forEach(cb => cb.checked = checkbox.checked);
+    }
+    
+    function cherryPickSelected() {
+        const checkboxes = document.querySelectorAll('.commit-checkbox:checked');
+        const commits = Array.from(checkboxes).map(cb => cb.value);
+        
+        if (commits.length === 0) {
+            alert('Please select at least one commit');
+            return;
+        }
+        
+        const targetBranch = document.getElementById('to-branch').value;
+        const confirmMsg = `Cherry-pick ${commits.length} commit(s) to ${targetBranch}?\n\nCommits: ${commits.join(', ')}`;
+        
+        if (!confirm(confirmMsg)) {
+            return;
+        }
+        
+        // 调用API执行cherry-pick
+        fetch(`/{{ repo_name }}/api/cherry-pick`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                commits: commits,
+                target_branch: targetBranch
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert(`Successfully cherry-picked ${data.count} commits`);
+                window.location.reload();
+            } else {
+                alert(`Cherry-pick failed: ${data.error}`);
+            }
+        })
+        .catch(err => alert(`Error: ${err.message}`));
+    }
+    </script>
 </body>
 </html>

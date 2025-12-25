@@ -22,6 +22,7 @@ pub struct SummaryTemplate {
     pub repo_name: String,
     pub repo_path: String,
     pub branches: Vec<BranchItem>,
+    pub all_branches: Vec<String>,
     pub links: Vec<DiffLink>,
 }
 
@@ -43,6 +44,7 @@ pub struct LogTemplate {
     pub branch: Option<String>,
     pub has_more: bool,
     pub next_offset: usize,
+    pub all_branches: Vec<String>,
     pub links: Vec<DiffLink>,
 }
 
@@ -63,6 +65,7 @@ pub struct CommitItem {
 pub struct CommitTemplate {
     pub repo_name: String,
     pub commit: CommitDetail,
+    pub all_branches: Vec<String>,
     pub links: Vec<DiffLink>,
 }
 
@@ -89,6 +92,7 @@ pub struct DiffTemplate {
     pub repo_name: String,
     pub from_branch: String,
     pub to_branch: String,
+    pub branches: Vec<String>,
     pub commits: Vec<CommitItem>,
     pub links: Vec<DiffLink>,
 }

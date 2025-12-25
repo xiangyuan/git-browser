@@ -62,12 +62,18 @@ pub async fn repo_summary(
         })
         .collect();
     
+    let all_branches: Vec<String> = branches
+        .iter()
+        .map(|b| b.name.clone())
+        .collect();
+    
     let links = get_diff_links(&ctx, &repo_name, None);
     
     let template = SummaryTemplate {
         repo_name: repo_name.clone(),
         repo_path: repo.path.clone(),
         branches: branch_items,
+        all_branches,
         links,
     };
     
@@ -114,6 +120,7 @@ pub async fn repo_log(
     
     let has_more = commit_items.len() >= limit as usize;
     let next_offset = (offset + limit) as usize;
+    let all_branches = get_all_branches(&ctx, repo.id).await?;
     let links = get_diff_links(&ctx, &repo_name, None);
     
     let template = LogTemplate {
@@ -122,6 +129,7 @@ pub async fn repo_log(
         branch: query.br.clone(),
         has_more,
         next_offset,
+        all_branches,
         links,
     };
     
@@ -177,6 +185,7 @@ pub async fn repo_commit(
             })
             .collect();
         
+        let all_branches = get_all_branches(&ctx, repo.id).await?;
         let links = get_diff_links(&ctx, &repo_name, None);
         
         let len = commit_items.len();
@@ -186,6 +195,7 @@ pub async fn repo_commit(
             branch: Some(default_branch_name.to_string()),
             has_more: len >= limit as usize,
             next_offset: limit as usize,
+            all_branches,
             links,
         };
         
@@ -218,11 +228,13 @@ pub async fn repo_commit(
         diff: git_detail.diff_html.clone(),
     };
     
+    let all_branches = get_all_branches(&ctx, repo.id).await?;
     let links = get_diff_links(&ctx, &repo_name, None);
     
     let template = CommitTemplate {
         repo_name: repo_name.clone(),
         commit: detail,
+        all_branches,
         links,
     };
     
@@ -245,6 +257,16 @@ pub async fn repo_diff(
         .find_by_name(&repo_name)
         .await?
         .ok_or_else(|| crate::shared::error::GitxError::RepositoryNotFound(repo_name.clone()))?;
+    
+    // 获取所有分支列表用于下拉选择
+    let all_branches = ctx.branch_store
+        .find_by_repository(repo.id)
+        .await?;
+    
+    let branch_names: Vec<String> = all_branches
+        .iter()
+        .map(|b| b.name.clone())
+        .collect();
     
     // 使用数据库中已索引的commits进行对比
     // 通过 author_name + summary + committer_time 识别相同的逻辑commit
@@ -272,6 +294,7 @@ pub async fn repo_diff(
         repo_name: repo_name.clone(),
         from_branch: query.o.clone(),
         to_branch: query.n.clone(),
+        branches: branch_names,
         commits: commit_items,
         links,
     };
@@ -327,6 +350,118 @@ pub struct SyncResponse {
     message: String,
 }
 
+/// API: Cherry-pick commits
+#[derive(Deserialize)]
+pub struct CherryPickRequest {
+    commits: Vec<String>,
+    target_branch: String,
+}
+
+#[derive(Serialize)]
+pub struct CherryPickResponse {
+    success: bool,
+    count: usize,
+    error: Option<String>,
+}
+
+pub async fn api_cherry_pick(
+    State(ctx): State<Arc<AppContext>>,
+    Path(repo_name): Path<String>,
+    Json(req): Json<CherryPickRequest>,
+) -> Result<Json<CherryPickResponse>> {
+    let repo = ctx.repository_store
+        .find_by_name(&repo_name)
+        .await?
+        .ok_or_else(|| crate::shared::error::GitxError::RepositoryNotFound(repo_name.clone()))?;
+    
+    let repo_path = std::path::PathBuf::from(&repo.path);
+    
+    use tokio::process::Command;
+    
+    // 1. 首先fetch远程分支获取最新代码
+    let fetch_output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("fetch")
+        .arg("origin")
+        .output()
+        .await?;
+    
+    if !fetch_output.status.success() {
+        let error_msg = String::from_utf8_lossy(&fetch_output.stderr).to_string();
+        return Ok(Json(CherryPickResponse {
+            success: false,
+            count: 0,
+            error: Some(format!("Failed to fetch: {}", error_msg)),
+        }));
+    }
+    
+    // 2. 处理目标分支名称（如果是origin/xxx，去掉origin/前缀）
+    let local_branch = if req.target_branch.starts_with("origin/") {
+        req.target_branch.strip_prefix("origin/").unwrap().to_string()
+    } else {
+        req.target_branch.clone()
+    };
+    
+    // 3. Checkout到目标分支（如果本地分支不存在，基于远程分支创建）
+    let checkout_output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("checkout")
+        .arg("-B")  // 创建或重置本地分支
+        .arg(&local_branch)
+        .arg(format!("origin/{}", local_branch))
+        .output()
+        .await?;
+    
+    if !checkout_output.status.success() {
+        let error_msg = String::from_utf8_lossy(&checkout_output.stderr).to_string();
+        return Ok(Json(CherryPickResponse {
+            success: false,
+            count: 0,
+            error: Some(format!("Failed to checkout {}: {}", local_branch, error_msg)),
+        }));
+    }
+    
+    // 4. 执行git cherry-pick
+    let mut success_count = 0;
+    for commit_oid in &req.commits {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(&repo_path)
+            .arg("cherry-pick")
+            .arg(commit_oid)
+            .output()
+            .await?;
+        
+        if output.status.success() {
+            success_count += 1;
+        } else {
+            let error_msg = String::from_utf8_lossy(&output.stderr).to_string();
+            // 如果失败，尝试abort
+            let _ = Command::new("git")
+                .arg("-C")
+                .arg(&repo_path)
+                .arg("cherry-pick")
+                .arg("--abort")
+                .output()
+                .await;
+            
+            return Ok(Json(CherryPickResponse {
+                success: false,
+                count: success_count,
+                error: Some(format!("Failed at commit {}: {}", commit_oid, error_msg)),
+            }));
+        }
+    }
+    
+    Ok(Json(CherryPickResponse {
+        success: true,
+        count: success_count,
+        error: None,
+    }))
+}
+
 fn get_diff_links(ctx: &AppContext, repo_name: &str, active: Option<(&str, &str)>) -> Vec<DiffLink> {
     ctx.config
         .projects
@@ -346,4 +481,11 @@ fn get_diff_links(ctx: &AppContext, repo_name: &str, active: Option<(&str, &str)
                 .collect()
         })
         .unwrap_or_default()
+}
+
+async fn get_all_branches(ctx: &AppContext, repo_id: i64) -> Result<Vec<String>> {
+    let branches = ctx.branch_store
+        .find_by_repository(repo_id)
+        .await?;
+    Ok(branches.iter().map(|b| b.name.clone()).collect())
 }

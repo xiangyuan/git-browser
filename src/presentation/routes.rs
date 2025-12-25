@@ -1,4 +1,4 @@
-use axum::{Router, routing::get};
+use axum::{Router, routing::{get, post}};
 use std::sync::Arc;
 use crate::presentation::handlers;
 use crate::infrastructure::cache::MokaCache;
@@ -26,6 +26,7 @@ pub fn create_app_router(ctx: Arc<AppContext>) -> Router {
         .route("/{repo}/log", get(handlers::repository::repo_log))
         .route("/{repo}/commit", get(handlers::repository::repo_commit))
         .route("/{repo}/diff-beta", get(handlers::repository::repo_diff))
+        .route("/{repo}/api/cherry-pick", post(handlers::repository::api_cherry_pick))
         
         // API 路由
         .nest("/api", api_routes())
