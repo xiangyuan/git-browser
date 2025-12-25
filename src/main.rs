@@ -36,8 +36,8 @@ pub struct Args {
     db_path: PathBuf,
 
     /// Server bind address
-    #[clap(short, long, default_value = "127.0.0.1:8080")]
-    bind_address: SocketAddr,
+    #[clap(short, long)]
+    bind_address: Option<SocketAddr>,
     
     /// Base path to scan for git repositories (can be a single repo or directory containing repos)
     #[clap(short = 'p', long = "path", value_parser, value_name = "PATH")]

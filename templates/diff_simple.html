@@ -3,30 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ repo_name }} - Diff</title>
-    <link rel="stylesheet" href="/statics/style.css">
+    <link rel="stylesheet" href="/statics/style.css?v=2">
+    <script src="/statics/app.js" defer></script>
 </head>
-<body>
+<body data-repo-name="{{ repo_name }}">
     <header>
         <h1><a href="/">index</a> : {{ repo_name }}</h1>
     </header>
     
     <!-- Global Branch Comparison Selector -->
-    <div style="margin: 0; padding: 12px 20px; background: linear-gradient(to bottom, #f6f8fa 0%, #eef1f5 100%); border-bottom: 2px solid #d0d7de; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-        <form method="get" style="display: flex; gap: 12px; align-items: center; max-width: 1200px; margin: 0 auto;">
-            <span style="font-weight: 600; color: #24292f; font-size: 14px; white-space: nowrap;">🔀 Compare branches:</span>
-            <select id="from-branch" name="o" style="padding: 6px 12px; border: 1px solid #d0d7de; border-radius: 6px; background: white; font-size: 14px; cursor: pointer; min-width: 180px; transition: all 0.2s;">
+    <div class="branch-selector-toolbar">
+        <form method="get" class="branch-selector-form">
+            <span class="branch-selector-label">🔀 Compare branches:</span>
+            <select id="from-branch" name="o" class="branch-selector-select">
                 {% for branch in branches %}
                 <option value="{{ branch }}" {% if branch.as_str() == from_branch %}selected{% endif %}>{{ branch }}</option>
                 {% endfor %}
             </select>
-            <span style="color: #57606a; font-weight: 500;">→</span>
-            <select id="to-branch" name="n" style="padding: 6px 12px; border: 1px solid #d0d7de; border-radius: 6px; background: white; font-size: 14px; cursor: pointer; min-width: 180px; transition: all 0.2s;">
+            <span class="branch-selector-arrow">→</span>
+            <select id="to-branch" name="n" class="branch-selector-select">
                 {% for branch in branches %}
                 <option value="{{ branch }}" {% if branch.as_str() == to_branch %}selected{% endif %}>{{ branch }}</option>
                 {% endfor %}
             </select>
-            <button type="submit" style="padding: 6px 20px; background: linear-gradient(to bottom, #2ea44f 0%, #2a8f46 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; box-shadow: 0 1px 3px rgba(27,31,36,0.12); transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 6px rgba(27,31,36,0.15)'" onmouseout="this.style.transform=''; this.style.boxShadow='0 1px 3px rgba(27,31,36,0.12)'">Compare</button>
-            <button type="button" onclick="swapBranches()" style="padding: 6px 12px; background: white; color: #0969da; border: 1px solid #d0d7de; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='white'">⇄ Swap</button>
+            <button type="submit" class="btn-compare">Compare</button>
+            <button type="button" onclick="swapBranches()" class="btn-swap">⇄ Swap</button>
         </form>
     </div>
     
@@ -40,27 +41,27 @@
     </nav>
     <main>
         <h2>Branch Comparison: {{ from_branch }} → {{ to_branch }}</h2>
-        <p style="margin: 1em 0; font-size: 0.9em; color: #57606a;">
+        <p class="comparison-desc">
             <em>Showing commits in <code>{{ from_branch }}</code> that are NOT in <code>{{ to_branch }}</code></em>
         </p>
         
         {% if commits.is_empty() %}
-        <p class="no-diff" style="padding: 2em; text-align: center; color: #28a745;">
+        <p class="no-diff-msg">
             ✓ No new commits in {{ to_branch }} - branches are in sync or {{ from_branch }} is ahead
         </p>
         {% else %}
-        <div style="padding: 0.5em 1em; background: #fff3cd; border-left: 3px solid #ffc107; margin-bottom: 1em; display: flex; justify-content: space-between; align-items: center;">
-            <span>Found <strong>{{ commits.len() }}</strong> commits <span id="cherry-picked-count" style="color: #2ea44f; font-weight: 600;"></span></span>
+        <div class="diff-actions">
+            <span>Found <strong>{{ commits.len() }}</strong> commits <span id="cherry-picked-count" class="cherry-picked-count"></span></span>
             <div style="display: flex; gap: 8px;">
-                <button onclick="cherryPickSelected()" style="padding: 0.5em 1.2em; background: #0969da; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; box-shadow: 0 1px 3px rgba(27,31,36,0.12);" onmouseover="this.style.background='#0860ca'" onmouseout="this.style.background='#0969da'">
+                <button onclick="cherryPickSelected()" class="btn-cherry-pick">
                     🍒 Cherry-pick Selected
                 </button>
-                <button onclick="pushChanges()" id="push-btn" style="padding: 0.5em 1.2em; background: #6e7781; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; box-shadow: 0 1px 3px rgba(27,31,36,0.12); display: none;" onmouseover="this.style.background='#57606a'" onmouseout="this.style.background='#6e7781'">
+                <button onclick="pushChanges()" id="push-btn" class="btn-push" style="display: none;">
                     ↑ Push to Remote
                 </button>
             </div>
         </div>
-        <div id="status-message" style="display: none; padding: 1em; margin-bottom: 1em; border-radius: 6px;"></div>
+        <div id="status-message" style="display: none;"></div>
         <table class="repositories">
             <thead>
                 <tr>
@@ -85,147 +86,5 @@
         </table>
         {% endif %}
     </main>
-    
-    <script>
-    function swapBranches() {
-        const fromSelect = document.getElementById('from-branch');
-        const toSelect = document.getElementById('to-branch');
-        const temp = fromSelect.value;
-        fromSelect.value = toSelect.value;
-        toSelect.value = temp;
-        fromSelect.form.submit();
-    }
-    
-    function toggleAll(checkbox) {
-        const checkboxes = document.querySelectorAll('.commit-checkbox:not(:disabled)');
-        checkboxes.forEach(cb => cb.checked = checkbox.checked);
-    }
-    
-    function cherryPickSelected() {
-        const checkboxes = document.querySelectorAll('.commit-checkbox:checked');
-        const commits = Array.from(checkboxes).map(cb => cb.value);
-        
-        if (commits.length === 0) {
-            showMessage('Please select at least one commit', 'warning');
-            return;
-        }
-        
-        const targetBranch = document.getElementById('to-branch').value;
-        const confirmMsg = `Cherry-pick ${commits.length} commit(s) to ${targetBranch}?\n\nThis will apply the changes locally. You'll need to push afterwards.`;
-        
-        if (!confirm(confirmMsg)) {
-            return;
-        }
-        
-        showMessage(`Cherry-picking ${commits.length} commits...`, 'info');
-        
-        // 调用API执行cherry-pick
-        fetch(`/{{ repo_name }}/api/cherry-pick`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                commits: commits,
-                target_branch: targetBranch
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                showMessage(
-                    `✅ Successfully cherry-picked ${data.count} commits to ${targetBranch}!\n` +
-                    `Next step: Click "Push to Remote" to sync with the server.`,
-                    'success'
-                );
-                // 显示push按钮
-                document.getElementById('push-btn').style.display = 'block';
-                
-                // 标记已处理的commit（变灰、禁用checkbox、添加✓图标）
-                checkboxes.forEach(cb => {
-                    const row = cb.closest('tr');
-                    row.style.opacity = '0.5';
-                    row.style.background = '#f6f8fa';
-                    cb.disabled = true;
-                    cb.checked = false;
-                    
-                    // 在commit message前添加✓标记
-                    const messageCell = row.cells[2];
-                    if (!messageCell.textContent.startsWith('✓ ')) {
-                        const link = messageCell.querySelector('a');
-                        if (link) {
-                            link.textContent = '✓ ' + link.textContent;
-                        }
-                    }
-                });
-                document.getElementById('select-all').checked = false;
-                
-                // 更新统计信息
-                updateCherryPickedCount();
-            } else {
-                showMessage(`❌ Cherry-pick failed: ${data.error}\n\nPicked ${data.count} commits before failure.`, 'error');
-            }
-        })
-        .catch(err => showMessage(`❌ Error: ${err.message}`, 'error'));
-    }
-    
-    function pushChanges() {
-        const targetBranch = document.getElementById('to-branch').value;
-        if (!confirm(`Push local changes to origin/${targetBranch}?`)) {
-            return;
-        }
-        
-        showMessage('Pushing to remote...', 'info');
-        
-        fetch(`/{{ repo_name }}/api/push`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ branch: targetBranch })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                showMessage('✅ Successfully pushed to remote! Refreshing...', 'success');
-                setTimeout(() => window.location.reload(), 1500);
-            } else {
-                showMessage(`❌ Push failed: ${data.error}`, 'error');
-            }
-        })
-        .catch(err => showMessage(`❌ Error: ${err.message}`, 'error'));
-    }
-    
-    function showMessage(text, type) {
-        const msgDiv = document.getElementById('status-message');
-        msgDiv.style.display = 'block';
-        msgDiv.textContent = text;
-        msgDiv.style.whiteSpace = 'pre-line';
-        
-        if (type === 'success') {
-            msgDiv.style.background = '#d1f4e0';
-            msgDiv.style.borderLeft = '3px solid #2ea44f';
-            msgDiv.style.color = '#1a7f37';
-        } else if (type === 'error') {
-            msgDiv.style.background = '#ffebe9';
-            msgDiv.style.borderLeft = '3px solid #cf222e';
-            msgDiv.style.color = '#a40e26';
-        } else if (type === 'warning') {
-            msgDiv.style.background = '#fff3cd';
-            msgDiv.style.borderLeft = '3px solid #ffc107';
-            msgDiv.style.color = '#856404';
-        } else {
-            msgDiv.style.background = '#ddf4ff';
-            msgDiv.style.borderLeft = '3px solid #0969da';
-            msgDiv.style.color = '#0550ae';
-        }
-    }
-    
-    function updateCherryPickedCount() {
-        const disabledCount = document.querySelectorAll('.commit-checkbox:disabled').length;
-        const countSpan = document.getElementById('cherry-picked-count');
-        if (disabledCount > 0) {
-            countSpan.textContent = `(✓ ${disabledCount} cherry-picked)`;
-        } else {
-            countSpan.textContent = '';
-        }
-    }
-    </script>
 </body>
 </html>

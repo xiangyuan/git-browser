@@ -127,7 +127,7 @@ impl Config {
     /// 从命令行参数和文件加载配置
     pub fn from_args_and_file(
         db_path: PathBuf,
-        bind_address: SocketAddr,
+        bind_address: Option<SocketAddr>,
         git_base_path: Option<PathBuf>,
     ) -> Result<Self> {
         // 尝试加载配置文件
@@ -146,7 +146,9 @@ impl Config {
         };
 
         // 命令行参数覆盖配置文件
-        config.server.bind_address = bind_address;
+        if let Some(addr) = bind_address {
+            config.server.bind_address = addr;
+        }
         config.database.sqlite_path = db_path;
 
         // 如果命令行提供了git路径，优先使用命令行参数
