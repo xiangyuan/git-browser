@@ -5,7 +5,8 @@ use axum::{
     debug_handler,
 };
 use std::sync::Arc;
-use serde::{Serialize, Deserialize};
+use std::fmt;
+use serde::{Serialize, Deserialize, de::{self, Deserializer, Visitor, SeqAccess}};
 use crate::presentation::routes::AppContext;
 use crate::presentation::dto::RepositoryDto;
 use crate::presentation::templates::*;
@@ -344,8 +345,45 @@ pub struct SyncResponse {
 /// API: Cherry-pick commits
 #[derive(Deserialize)]
 pub struct CherryPickRequest {
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
     commits: Vec<String>,
+    #[serde(alias = "n")]
     target_branch: String,
+}
+
+fn deserialize_string_or_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct StringOrVec;
+
+    impl<'de> Visitor<'de> for StringOrVec {
+        type Value = Vec<String>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("string or list of strings")
+        }
+
+        fn visit_str<E>(self, value: &str) -> std::result::Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(vec![value.to_owned()])
+        }
+
+        fn visit_seq<S>(self, mut visitor: S) -> std::result::Result<Self::Value, S::Error>
+        where
+            S: SeqAccess<'de>,
+        {
+            let mut vec = Vec::new();
+            while let Some(elem) = visitor.next_element()? {
+                vec.push(elem);
+            }
+            Ok(vec)
+        }
+    }
+
+    deserializer.deserialize_any(StringOrVec)
 }
 
 #[derive(Serialize)]
