@@ -67,14 +67,12 @@ pub async fn repo_summary(
         .map(|b| b.name.clone())
         .collect();
     
-    let links = get_diff_links(&ctx, &repo_name, None);
-    
+
     let template = SummaryTemplate {
         repo_name: repo_name.clone(),
         repo_path: repo.path.clone(),
         branches: branch_items,
         all_branches,
-        links,
     };
     
     Ok(Html(template.render()?))
@@ -121,8 +119,7 @@ pub async fn repo_log(
     let has_more = commit_items.len() >= limit as usize;
     let next_offset = (offset + limit) as usize;
     let all_branches = get_all_branches(&ctx, repo.id).await?;
-    let links = get_diff_links(&ctx, &repo_name, None);
-    
+
     let template = LogTemplate {
         repo_name: repo_name.clone(),
         commits: commit_items,
@@ -130,7 +127,6 @@ pub async fn repo_log(
         has_more,
         next_offset,
         all_branches,
-        links,
     };
     
     Ok(Html(template.render()?))
@@ -186,8 +182,7 @@ pub async fn repo_commit(
             .collect();
         
         let all_branches = get_all_branches(&ctx, repo.id).await?;
-        let links = get_diff_links(&ctx, &repo_name, None);
-        
+
         let len = commit_items.len();
         let template = LogTemplate {
             repo_name: repo_name.clone(),
@@ -196,7 +191,6 @@ pub async fn repo_commit(
             has_more: len >= limit as usize,
             next_offset: limit as usize,
             all_branches,
-            links,
         };
         
         return Ok(Html(template.render()?));
@@ -229,13 +223,11 @@ pub async fn repo_commit(
     };
     
     let all_branches = get_all_branches(&ctx, repo.id).await?;
-    let links = get_diff_links(&ctx, &repo_name, None);
-    
+
     let template = CommitTemplate {
         repo_name: repo_name.clone(),
         commit: detail,
         all_branches,
-        links,
     };
     
     Ok(Html(template.render()?))
@@ -288,15 +280,13 @@ pub async fn repo_diff(
         })
         .collect();
     
-    let links = get_diff_links(&ctx, &repo_name, Some((&query.o, &query.n)));
-    
+
     let template = DiffTemplate {
         repo_name: repo_name.clone(),
         from_branch: query.o.clone(),
         to_branch: query.n.clone(),
         branches: branch_names,
         commits: commit_items,
-        links,
     };
     
     Ok(Html(template.render()?))
@@ -510,27 +500,6 @@ pub async fn api_push(
             error: Some(error_msg),
         }))
     }
-}
-
-fn get_diff_links(ctx: &AppContext, repo_name: &str, active: Option<(&str, &str)>) -> Vec<DiffLink> {
-    ctx.config
-        .projects
-        .iter()
-        .find(|p| p.name == repo_name)
-        .map(|p| {
-            p.branches
-                .iter()
-                .map(|b| DiffLink {
-                    name: b.name.clone(),
-                    from_branch: b.from_branch.clone(),
-                    to_branch: b.to_branch.clone(),
-                    active: active
-                        .map(|(o, n)| o == b.from_branch && n == b.to_branch)
-                        .unwrap_or(false),
-                })
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 async fn get_all_branches(ctx: &AppContext, repo_id: i64) -> Result<Vec<String>> {

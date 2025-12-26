@@ -23,7 +23,6 @@ pub struct SummaryTemplate {
     pub repo_path: String,
     pub branches: Vec<BranchItem>,
     pub all_branches: Vec<String>,
-    pub links: Vec<DiffLink>,
 }
 
 #[derive(Clone)]
@@ -45,7 +44,6 @@ pub struct LogTemplate {
     pub has_more: bool,
     pub next_offset: usize,
     pub all_branches: Vec<String>,
-    pub links: Vec<DiffLink>,
 }
 
 #[derive(Clone)]
@@ -66,7 +64,6 @@ pub struct CommitTemplate {
     pub repo_name: String,
     pub commit: CommitDetail,
     pub all_branches: Vec<String>,
-    pub links: Vec<DiffLink>,
 }
 
 #[derive(Clone)]
@@ -94,13 +91,4 @@ pub struct DiffTemplate {
     pub to_branch: String,
     pub branches: Vec<String>,
     pub commits: Vec<CommitItem>,
-    pub links: Vec<DiffLink>,
-}
-
-#[derive(Clone)]
-pub struct DiffLink {
-    pub name: String,
-    pub from_branch: String,
-    pub to_branch: String,
-    pub active: bool,
 }

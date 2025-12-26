@@ -30,13 +30,3 @@ scan_paths = [
     "Product/Server",      # server 子仓库
     # 添加其他需要监控的仓库路径...
 ]
-
-[[projects.branches]]
-name = "main→beta"
-from_branch = "origin/main"
-to_branch = "origin/beta"
-
-[[projects.branches]]
-name = "master→gio-beta"
-from_branch = "origin/main"
-to_branch = "origin/gio-beta"

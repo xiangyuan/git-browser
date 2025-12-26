@@ -35,9 +35,6 @@
         <a href="/{{ repo_name }}/summary">summary</a>
         <a href="/{{ repo_name }}/log">log</a>
         <a href="/{{ repo_name }}/commit">commit</a>
-        {% for link in links %}
-        <a href="/{{ repo_name }}/diff-beta?o={{ link.from_branch }}&n={{ link.to_branch }}" {% if link.active %}class="active"{% endif %}>{{ link.name }}</a>
-        {% endfor %}
     </nav>
     <main>
         <h2>Branch Comparison: {{ from_branch }} → {{ to_branch }}</h2>

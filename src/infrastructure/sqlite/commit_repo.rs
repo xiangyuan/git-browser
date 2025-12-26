@@ -310,7 +310,7 @@ impl CommitPort for SqliteCommitRepository {
             LEFT JOIN commits new ON 
                 new.repository_id = c.repository_id
                 AND new.branch = ?
-                AND new.author_name = c.author_name
+                AND new.author_time = c.author_time
                 AND new.summary = c.summary
             WHERE c.repository_id = ? 
               AND c.branch = ?

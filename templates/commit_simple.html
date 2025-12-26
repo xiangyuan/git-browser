@@ -37,9 +37,6 @@
         <a href="/{{ repo_name }}/summary">summary</a>
         <a href="/{{ repo_name }}/log">log</a>
         <a href="/{{ repo_name }}/commit" class="active">commit</a>
-        {% for link in links %}
-        <a href="/{{ repo_name }}/diff-beta?o={{ link.from_branch }}&n={{ link.to_branch }}" {% if link.active %}class="active"{% endif %}>{{ link.name }}</a>
-        {% endfor %}
     </nav>
     <main>
         <h2>Commit {{ commit.sha[..8] }}</h2>
