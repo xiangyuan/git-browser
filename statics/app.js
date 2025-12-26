@@ -1,5 +1,51 @@
 // 全局JavaScript函数
 
+// Timeago 逻辑
+function timeAgo(dateString) {
+    // 兼容性处理：将 "2023-01-01 12:00:00" 转换为 "2023/01/01 12:00:00"
+    // Safari 等浏览器不支持带横杠的日期解析
+    const safeDateString = dateString.replace(/-/g, '/');
+    const date = new Date(safeDateString);
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+    
+    if (isNaN(seconds)) return dateString; // 如果解析失败，返回原字符串
+
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + " years ago";
+    
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + " months ago";
+    
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + " days ago";
+    
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + " hours ago";
+    
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + " minutes ago";
+    
+    return Math.floor(seconds) + " seconds ago";
+}
+
+function updateTimeAgo() {
+    document.querySelectorAll('.timeago').forEach(el => {
+        const timestamp = el.getAttribute('datetime');
+        if (timestamp) {
+            el.textContent = timeAgo(timestamp);
+            el.title = timestamp; // 鼠标悬停显示完整时间
+        }
+    });
+}
+
+// 页面加载完成后执行
+document.addEventListener('DOMContentLoaded', () => {
+    updateTimeAgo();
+    // 每分钟更新一次
+    setInterval(updateTimeAgo, 60000);
+});
+
 // 分支选择器：交换两个分支
 function swapBranches() {
     const fromSelect = document.getElementById('from-branch');

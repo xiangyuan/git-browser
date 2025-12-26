@@ -3,33 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ repo_name }} - Diff</title>
-    <link rel="stylesheet" href="/statics/style.css?v=2">
-    <script src="/statics/app.js" defer></script>
+    <link rel="stylesheet" href="/statics/style.css?v=5">
+    <script src="/statics/app.js?v=5" defer></script>
 </head>
 <body data-repo-name="{{ repo_name }}">
     <header>
         <h1><a href="/">index</a> : {{ repo_name }}</h1>
     </header>
-    
-    <!-- Global Branch Comparison Selector -->
-    <div class="branch-selector-toolbar">
-        <form method="get" class="branch-selector-form">
-            <span class="branch-selector-label">🔀 Compare branches:</span>
-            <select id="from-branch" name="o" class="branch-selector-select">
-                {% for branch in branches %}
-                <option value="{{ branch }}" {% if branch.as_str() == from_branch %}selected{% endif %}>{{ branch }}</option>
-                {% endfor %}
-            </select>
-            <span class="branch-selector-arrow">→</span>
-            <select id="to-branch" name="n" class="branch-selector-select">
-                {% for branch in branches %}
-                <option value="{{ branch }}" {% if branch.as_str() == to_branch %}selected{% endif %}>{{ branch }}</option>
-                {% endfor %}
-            </select>
-            <button type="submit" class="btn-compare">Compare</button>
-            <button type="button" onclick="swapBranches()" class="btn-swap">⇄ Swap</button>
-        </form>
-    </div>
     
     <nav>
         <a href="/{{ repo_name }}/summary">summary</a>
@@ -37,16 +17,27 @@
         <a href="/{{ repo_name }}/commit">commit</a>
     </nav>
     <main>
-        <h2>Branch Comparison: {{ from_branch }} → {{ to_branch }}</h2>
-        <p class="comparison-desc">
-            <em>Showing commits in <code>{{ from_branch }}</code> that are NOT in <code>{{ to_branch }}</code></em>
-        </p>
-        
-        {% if commits.is_empty() %}
-        <p class="no-diff-msg">
-            ✓ No new commits in {{ to_branch }} - branches are in sync or {{ from_branch }} is ahead
-        </p>
-        {% else %}
+    <div class="sticky-header-group">
+        <!-- Global Branch Comparison Selector -->
+        <div class="branch-selector-toolbar">
+            <form method="get" class="branch-selector-form">
+                <span class="branch-selector-label">🔀 Compare branches:</span>
+                <select id="from-branch" name="o" class="branch-selector-select">
+                    {% for branch in branches %}
+                    <option value="{{ branch }}" {% if branch.as_str() == from_branch %}selected{% endif %}>{{ branch }}</option>
+                    {% endfor %}
+                </select>
+                <span class="branch-selector-arrow">→</span>
+                <select id="to-branch" name="n" class="branch-selector-select">
+                    {% for branch in branches %}
+                    <option value="{{ branch }}" {% if branch.as_str() == to_branch %}selected{% endif %}>{{ branch }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn-compare">Compare</button>
+                <button type="button" onclick="swapBranches()" class="btn-swap">⇄ Swap</button>
+            </form>
+        </div>
+        {% if !commits.is_empty() %}
         <div class="diff-actions">
             <span>Found <strong>{{ commits.len() }}</strong> commits <span id="cherry-picked-count" class="cherry-picked-count"></span></span>
             <div style="display: flex; gap: 8px;">
@@ -58,6 +49,18 @@
                 </button>
             </div>
         </div>
+        {% endif %}
+    </div>
+        <h2>Branch Comparison: {{ from_branch }} → {{ to_branch }}</h2>
+        <p class="comparison-desc">
+            <em>Showing commits in <code>{{ from_branch }}</code> that are NOT in <code>{{ to_branch }}</code></em>
+        </p>
+        
+        {% if commits.is_empty() %}
+        <p class="no-diff-msg">
+            ✓ No new commits in {{ to_branch }} - branches are in sync or {{ from_branch }} is ahead
+        </p>
+        {% else %}
         <div id="status-message" style="display: none;"></div>
         <table class="repositories">
             <thead>
@@ -73,7 +76,7 @@
                 {% for commit in commits %}
                 <tr>
                     <td><input type="checkbox" class="commit-checkbox" value="{{ commit.sha }}"></td>
-                    <td>{{ commit.committer_time }}</td>
+                    <td class="timeago" datetime="{{ commit.committer_time }}">{{ commit.committer_time }}</td>
                     <td><a href="/{{ repo_name }}/commit?id={{ commit.sha }}">{{ commit.summary }}</a></td>
                     <td>{{ commit.author_name }}</td>
                     <td><a href="/{{ repo_name }}/commit?id={{ commit.sha }}">{{ commit.sha_short }}</a></td>

@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ repo_name }} - Summary</title>
-    <link rel="stylesheet" href="/statics/style.css?v=2">
-    <script src="/statics/app.js" defer></script>
+    <link rel="stylesheet" href="/statics/style.css?v=4">
+    <script src="/statics/app.js?v=4" defer></script>
 </head>
 <body data-repo-name="{{ repo_name }}">
     <header>
@@ -58,7 +58,7 @@
                     <td><a href="/{{ repo_name }}/commit?id={{ branch.commit_sha }}">{{ branch.commit_sha[..8] }}</a></td>
                     <td>{{ branch.commit_message }}</td>
                     <td>{{ branch.author }}</td>
-                    <td>{{ branch.time }}</td>
+                    <td class="timeago" datetime="{{ branch.time }}">{{ branch.time }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
