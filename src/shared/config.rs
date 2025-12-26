@@ -104,16 +104,8 @@ pub struct ProjectConfig {
     pub name: String,
     pub base_path: PathBuf,
     pub scan_paths: Vec<String>,
-    pub branches: Vec<BranchCompareConfig>,
 }
 
-/// 分支对比配置
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct BranchCompareConfig {
-    pub name: String,
-    pub from_branch: String,
-    pub to_branch: String,
-}
 
 impl Config {
     /// 从文件加载配置
@@ -131,9 +123,17 @@ impl Config {
         git_base_path: Option<PathBuf>,
     ) -> Result<Self> {
         // 尝试加载配置文件
-        let mut config = if let Ok(cfg) = Self::from_file("config.toml") {
-            cfg
+        let config_path = std::path::Path::new("config.toml");
+        let mut config = if config_path.exists() {
+            match Self::from_file("config.toml") {
+                Ok(cfg) => cfg,
+                Err(e) => {
+                    tracing::error!("Found config.toml but failed to load it: {}", e);
+                    return Err(e);
+                }
+            }
         } else {
+            tracing::info!("config.toml not found, using default configuration");
             // 使用默认配置
             Config {
                 server: ServerConfig::default(),
@@ -163,7 +163,6 @@ impl Config {
                 name: project_name,
                 base_path,
                 scan_paths: vec![".".to_string()],  // 扫描整个目录
-                branches: vec![],  // 不预设分支对比
             }];
         } else if config.projects.is_empty() {
             // 如果没有命令行参数且配置文件也没有项目，则无法发现仓库
