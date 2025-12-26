@@ -11,6 +11,7 @@ use crate::presentation::routes::AppContext;
 use crate::presentation::dto::RepositoryDto;
 use crate::presentation::templates::*;
 use crate::shared::result::Result;
+use crate::services::worker::IndexWorker;
 
 /// 列出所有仓库（Web UI）- 使用模板
 pub async fn list_repositories(
@@ -546,6 +547,13 @@ pub async fn api_push(
     let repo_path = std::path::PathBuf::from(&repo.path);
     
     use tokio::process::Command;
+
+    // 处理分支名称：如果包含 origin/ 前缀，去掉它
+    let branch_name = if req.branch.starts_with("origin/") {
+        req.branch.strip_prefix("origin/").unwrap()
+    } else {
+        &req.branch
+    };
     
     // 执行git push
     let output = Command::new("git")
@@ -553,17 +561,97 @@ pub async fn api_push(
         .arg(&repo_path)
         .arg("push")
         .arg("origin")
-        .arg(&req.branch)
+        .arg(branch_name)
         .output()
         .await?;
     
     if output.status.success() {
+        // 触发索引更新，确保前端 Diff 视图能及时刷新
+        let worker = IndexWorker::new(
+            ctx.config.clone(),
+            ctx.repository_store.clone(),
+            ctx.commit_store.clone(),
+            ctx.branch_store.clone(),
+            ctx.git_client.clone(),
+        );
+        // 忽略索引错误，不影响 Push 结果
+        if let Err(e) = worker.index_repository(repo.id, &repo_path).await {
+            tracing::error!("Failed to index repository after push: {}", e);
+        }
+
         Ok(Json(PushResponse {
             success: true,
             error: None,
         }))
     } else {
         let error_msg = String::from_utf8_lossy(&output.stderr).to_string();
+        
+        // 如果是因为远程有更新导致失败（non-fast-forward），尝试 pull --rebase
+        if error_msg.contains("rejected") || error_msg.contains("fetch first") {
+            // 尝试 pull --rebase
+            let pull_output = Command::new("git")
+                .arg("-C")
+                .arg(&repo_path)
+                .arg("pull")
+                .arg("--rebase")
+                .arg("origin")
+                .arg(branch_name)
+                .output()
+                .await?;
+// 触发索引更新
+                    let worker = IndexWorker::new(
+                        ctx.config.clone(),
+                        ctx.repository_store.clone(),
+                        ctx.commit_store.clone(),
+                        ctx.branch_store.clone(),
+                        ctx.git_client.clone(),
+                    );
+                    if let Err(e) = worker.index_repository(repo.id, &repo_path).await {
+                        tracing::error!("Failed to index repository after auto-rebase push: {}", e);
+                    }
+
+                    
+            if pull_output.status.success() {
+                // Rebase 成功，再次尝试 Push
+                let push_retry = Command::new("git")
+                    .arg("-C")
+                    .arg(&repo_path)
+                    .arg("push")
+                    .arg("origin")
+                    .arg(branch_name)
+                    .output()
+                    .await?;
+                
+                if push_retry.status.success() {
+                    return Ok(Json(PushResponse {
+                        success: true,
+                        error: None,
+                    }));
+                } else {
+                    let retry_err = String::from_utf8_lossy(&push_retry.stderr).to_string();
+                    return Ok(Json(PushResponse {
+                        success: false,
+                        error: Some(format!("Auto-rebase succeeded but push failed again: {}", retry_err)),
+                    }));
+                }
+            } else {
+                // Rebase 失败（可能有冲突），尝试 abort
+                let _ = Command::new("git")
+                    .arg("-C")
+                    .arg(&repo_path)
+                    .arg("rebase")
+                    .arg("--abort")
+                    .output()
+                    .await;
+                
+                let pull_err = String::from_utf8_lossy(&pull_output.stderr).to_string();
+                return Ok(Json(PushResponse {
+                    success: false,
+                    error: Some(format!("Remote has changes. Auto-rebase failed (likely conflicts): {}", pull_err)),
+                }));
+            }
+        }
+
         Ok(Json(PushResponse {
             success: false,
             error: Some(error_msg),
