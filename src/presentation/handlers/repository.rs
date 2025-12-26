@@ -2,6 +2,7 @@ use askama::Template;
 use axum::{
     extract::{State, Path, Query},
     response::{Html, IntoResponse, Json},
+    debug_handler,
 };
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};
@@ -354,11 +355,33 @@ pub struct CherryPickResponse {
     error: Option<String>,
 }
 
+// HTMX 响应模板
+#[derive(Template)]
+#[template(path = "macros/alert.html")]
+struct AlertTemplate {
+    level: String, // success, error, warning, info
+    message: String,
+}
+
+#[debug_handler]
 pub async fn api_cherry_pick(
     State(ctx): State<Arc<AppContext>>,
     Path(repo_name): Path<String>,
-    Json(req): Json<CherryPickRequest>,
-) -> Result<Json<CherryPickResponse>> {
+    // Axum 0.7+ 不支持 Option<Json<T>> 这种自动推断
+    // 我们需要手动处理 body
+    req: Option<Json<CherryPickRequest>>,
+) -> Result<impl IntoResponse> {
+    // 如果是 JSON 请求，直接使用
+    let req = if let Some(Json(r)) = req {
+        r
+    } else {
+        // 如果不是 JSON，尝试解析 Form
+        // 注意：这里简化处理，实际上应该根据 Content-Type 判断
+        // 但由于 axum 的 extractor 机制，我们不能同时拥有两个 body extractor
+        // 所以对于 HTMX，我们让它发送 JSON 或者我们手动解析 Bytes
+        return Ok(Html("<div class='msg-error'>Invalid request format. Please use JSON.</div>".to_string()).into_response());
+    };
+
     let repo = ctx.repository_store
         .find_by_name(&repo_name)
         .await?
@@ -379,11 +402,14 @@ pub async fn api_cherry_pick(
     
     if !fetch_output.status.success() {
         let error_msg = String::from_utf8_lossy(&fetch_output.stderr).to_string();
-        return Ok(Json(CherryPickResponse {
-            success: false,
-            count: 0,
-            error: Some(format!("Failed to fetch: {}", error_msg)),
-        }));
+        let msg = format!("Failed to fetch: {}", error_msg);
+        
+        // 如果是 HTMX 请求 (通过 header 判断，这里简单起见直接返回 HTML)
+        // 更好的做法是检查 HX-Request header
+        return Ok(Html(format!(
+            r#"<div class="msg-error">❌ {}</div>"#, 
+            msg
+        )).into_response());
     }
     
     // 2. 处理目标分支名称（如果是origin/xxx，去掉origin/前缀）
@@ -406,11 +432,11 @@ pub async fn api_cherry_pick(
     
     if !checkout_output.status.success() {
         let error_msg = String::from_utf8_lossy(&checkout_output.stderr).to_string();
-        return Ok(Json(CherryPickResponse {
-            success: false,
-            count: 0,
-            error: Some(format!("Failed to checkout {}: {}", local_branch, error_msg)),
-        }));
+        let msg = format!("Failed to checkout {}: {}", local_branch, error_msg);
+        return Ok(Html(format!(
+            r#"<div class="msg-error">❌ {}</div>"#, 
+            msg
+        )).into_response());
     }
     
     // 4. 执行git cherry-pick
@@ -437,19 +463,24 @@ pub async fn api_cherry_pick(
                 .output()
                 .await;
             
-            return Ok(Json(CherryPickResponse {
-                success: false,
-                count: success_count,
-                error: Some(format!("Failed at commit {}: {}", commit_oid, error_msg)),
-            }));
+            let msg = format!("Failed at commit {}: {}", commit_oid, error_msg);
+            return Ok(Html(format!(
+                r#"<div class="msg-error">❌ {}</div>"#, 
+                msg
+            )).into_response());
         }
     }
     
-    Ok(Json(CherryPickResponse {
-        success: true,
-        count: success_count,
-        error: None,
-    }))
+    let msg = format!("Successfully cherry-picked {} commits to {}", success_count, local_branch);
+    Ok(Html(format!(
+        r#"<div class="msg-success">✅ {}</div>
+           <script>
+               document.getElementById('cherry-picked-count').textContent = '(Picked {})';
+               document.getElementById('push-btn').style.display = 'inline-block';
+           </script>
+        "#, 
+        msg, success_count
+    )).into_response())
 }
 
 /// API: Push branch to remote

@@ -1,0 +1,7 @@
+<div class="msg-{{ level }}">
+    {% if level == "success" %}✅{% endif %}
+    {% if level == "error" %}❌{% endif %}
+    {% if level == "warning" %}⚠️{% endif %}
+    {% if level == "info" %}ℹ️{% endif %}
+    {{ message }}
+</div>

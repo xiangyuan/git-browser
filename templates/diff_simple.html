@@ -5,6 +5,8 @@
     <title>{{ repo_name }} - Diff</title>
     <link rel="stylesheet" href="/statics/style.css?v=5">
     <script src="/statics/app.js?v=5" defer></script>
+    <script src="/statics/htmx.min.js"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js"></script>
 </head>
 <body data-repo-name="{{ repo_name }}">
     <header>
@@ -34,14 +36,20 @@
                     {% endfor %}
                 </select>
                 <button type="submit" class="btn-compare">Compare</button>
-                <button type="button" onclick="swapBranches()" class="btn-swap">⇄ Swap</button>
+                <a href="?o={{ to_branch }}&n={{ from_branch }}" class="btn-swap" style="text-decoration: none; display: inline-block; text-align: center;">⇄ Swap</a>
             </form>
         </div>
         {% if !commits.is_empty() %}
         <div class="diff-actions">
             <span>Found <strong>{{ commits.len() }}</strong> commits <span id="cherry-picked-count" class="cherry-picked-count"></span></span>
             <div style="display: flex; gap: 8px;">
-                <button onclick="cherryPickSelected()" class="btn-cherry-pick">
+                <button id="cherry-pick-btn"
+                        hx-post="/{{ repo_name }}/api/cherry-pick"
+                        hx-ext="json-enc"
+                        hx-include="#commits-form, #to-branch"
+                        hx-target="#status-message"
+                        hx-swap="innerHTML show:top"
+                        class="btn-cherry-pick">
                     🍒 Cherry-pick Selected
                 </button>
                 <button onclick="pushChanges()" id="push-btn" class="btn-push" style="display: none;">
@@ -62,6 +70,7 @@
         </p>
         {% else %}
         <div id="status-message" style="display: none;"></div>
+        <form id="commits-form">
         <table class="repositories">
             <thead>
                 <tr>
@@ -75,7 +84,7 @@
             <tbody>
                 {% for commit in commits %}
                 <tr>
-                    <td><input type="checkbox" class="commit-checkbox" value="{{ commit.sha }}"></td>
+                    <td><input type="checkbox" name="commits" class="commit-checkbox" value="{{ commit.sha }}"></td>
                     <td class="timeago" datetime="{{ commit.committer_time }}">{{ commit.committer_time }}</td>
                     <td><a href="/{{ repo_name }}/commit?id={{ commit.sha }}">{{ commit.summary }}</a></td>
                     <td>{{ commit.author_name }}</td>
@@ -84,6 +93,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </form>
         {% endif %}
     </main>
 </body>

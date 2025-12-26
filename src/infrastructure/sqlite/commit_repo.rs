@@ -133,7 +133,7 @@ impl CommitPort for SqliteCommitRepository {
                    summary, message, parent_oids, created_at
             FROM commits
             WHERE repository_id = ? AND branch = ?
-            ORDER BY author_time DESC
+            ORDER BY committer_time DESC
             LIMIT 1
             "#,
         )

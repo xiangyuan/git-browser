@@ -9,7 +9,7 @@ anyhow = { version = "1.0.62", features = ["backtrace"] }
 thiserror = "2.0.17"
 
 # Web framework
-axum = "0.8.8"
+axum = { version = "0.8.8", features = ["macros"] }
 tower = "0.5.2"
 tower-service = "0.3"
 tower-layer = "0.3"

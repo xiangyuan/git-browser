@@ -105,12 +105,13 @@ impl IndexWorker {
         ref_name: &str,        // 完整ref路径，如 refs/remotes/origin/main
         branch_name: &str,     // 简短名称，如 origin/main
     ) -> Result<usize> {
-        // 这里需要 CommitPort，但我们还没有注入
-        // 暂时返回 0，后续需要添加 commit_store
-        
-        // TODO: 获取最后索引的提交
-        // let last_indexed = self.commit_store.get_latest_commit(repository_id, branch).await?;
-        let last_indexed_oid: Option<String> = None; // 暂时全量索引
+        // 获取最后索引的提交
+        let last_indexed = self.commit_store.get_latest_commit(repository_id, branch_name).await?;
+        let last_indexed_oid = last_indexed.map(|c| c.oid);
+
+        if let Some(ref oid) = last_indexed_oid {
+            debug!("Found last indexed commit for {}: {}", branch_name, oid);
+        }
 
         // 获取新提交
         let commits = self.git_client.get_commits(
