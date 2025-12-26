@@ -4,8 +4,76 @@
 function timeAgo(dateString) {
     // 兼容性处理：将 "2023-01-01 12:00:00" 转换为 "2023/01/01 12:00:00"
     // Safari 等浏览器不支持带横杠的日期解析
-    const safeDateString = dateString.replace(/-/g, '/');
-    const date = new Date(safeDateString);
+    let safeDateString = dateString.replace(/-/g, '/');
+    
+    // 如果没有时区信息，假设是 UTC 时间（因为后端返回的是 UTC 时间格式化后的字符串，但没有带 Z）
+    // 或者如果后端返回的是本地时间但没带时区，这里需要根据实际情况调整
+    // 观察到你的时间字符串是 "2025-12-18 17:45:42 +0800" 这种格式
+    // Date.parse 能正确处理带时区的字符串，但需要确保格式标准
+    
+    // 尝试直接解析
+    let date = new Date(dateString);
+    
+    // 如果直接解析失败（比如 Safari 不支持横杠），再尝试替换
+    if (isNaN(date.getTime())) {
+        date = new Date(safeDateString);
+    }
+    
+    // 如果还是无效，且看起来像 "YYYY-MM-DD HH:mm:ss" 这种无时区格式
+    // 且我们知道它是 UTC 时间，可以手动追加 "Z"
+    // 但根据你的描述，它带了 "+0800"，所以应该能被正确解析为本地时间
+    // 问题可能出在后端返回的时间字符串格式上，或者浏览器解析时的默认行为
+    
+    // 让我们用更稳健的方式：
+    // 如果字符串包含 " +0800"，Date 对象会正确识别它。
+    // 如果显示"多了8小时"，说明浏览器把它当成了 UTC 时间，然后又加了8小时显示为本地时间？
+    // 或者它本身就是 UTC 时间，但被当成了本地时间？
+    
+    // 假设后端返回的是 "2025-12-18 17:45:42" (UTC)，而你想显示为 "x hours ago"
+    // 此时 new Date("...") 会把它当做本地时间处理（即 UTC+8 的 17:45）
+    // 实际 UTC 时间是 09:45。
+    // 现在的 new Date() 是 UTC+8 的当前时间。
+    // 两个一减，差值是对的。
+    
+    // 但如果后端返回的是 "2025-12-18 17:45:42 +0800"
+    // new Date() 解析后，会得到一个绝对时间戳。
+    // new Date() (当前时间) 也是一个绝对时间戳。
+    // 两者相减，应该得到真实的秒数差。
+    
+    // 如果你觉得"多了8小时"，可能是因为后端返回的时间其实是 UTC 时间，但格式化成了 "YYYY-MM-DD HH:mm:ss" 且没带时区信息？
+    // 这种情况下，浏览器会把它当成本地时间。
+    // 比如 UTC 12:00，本地是 20:00。
+    // 后端返回 "12:00"。浏览器认为是本地 12:00。
+    // 实际当前时间是本地 20:00。
+    // 算出来就是 "8 hours ago"。但实际上应该是 "Just now"。
+    
+    // 修复方案：如果后端给的是 UTC 时间但没带标记，我们需要把它当做 UTC 解析
+    // 但如果后端给的是带 "+0800" 的，那解析应该是正确的。
+    
+    // 针对你的具体描述 "显示的都是多了8小时"，这通常意味着：
+    // 真实时间是 "刚刚"，但显示 "8小时前"。
+    // 这说明 dateString 被解析出的时间点，比当前时间早了8小时。
+    // 比如现在是 18:00 (UTC+8)。
+    // dateString 解析出来是 10:00 (UTC+8)。
+    // 这意味着 dateString 内容是 "10:00"，且被当成了本地时间。
+    // 但实际上那个事件发生在 18:00 (UTC+8)，也就是 10:00 (UTC)。
+    // 所以后端给的字符串应该是 "10:00" (UTC时间)，但没带 "Z" 或 "+0000"。
+    
+    // 让我们尝试强制把输入当做 UTC 处理（如果它没有时区信息）
+    if (!dateString.includes('+') && !dateString.includes('Z')) {
+        // 假设是 UTC
+        date = new Date(dateString + ' Z');
+        // 如果加上 Z 后解析失败（比如 Safari），回退
+        if (isNaN(date.getTime())) {
+             date = new Date(safeDateString.replace(' ', 'T') + 'Z');
+        }
+    }
+    
+    // 如果还是无效，回退到原始解析
+    if (isNaN(date.getTime())) {
+        date = new Date(safeDateString);
+    }
+
     const now = new Date();
     const seconds = Math.floor((now - date) / 1000);
     

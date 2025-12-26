@@ -27,8 +27,7 @@ pub async fn list_repositories(
             description: r.description.clone(),
             last_modified: r.last_synced_at
                 .unwrap_or(r.created_at)
-                .format("%Y-%m-%d %H:%M:%S")
-                .to_string(),
+                .to_rfc3339(),
         })
         .collect();
     
@@ -115,7 +114,7 @@ pub async fn repo_log(
             summary: c.summary.to_string(),
             author_name: c.author_name.clone(),
             author_email: c.author_email.clone(),
-            committer_time: c.committer_time.format("%Y-%m-%d %H:%M:%S").to_string(),
+            committer_time: c.committer_time.to_rfc3339(),
         })
         .collect();
     
@@ -180,7 +179,7 @@ pub async fn repo_commit(
                 summary: c.summary.clone(),
                 author_name: c.author_name.clone(),
                 author_email: c.author_email.clone(),
-                committer_time: c.committer_time.format("%Y-%m-%d %H:%M:%S").to_string(),
+                committer_time: c.committer_time.to_rfc3339(),
             })
             .collect();
         
@@ -216,10 +215,10 @@ pub async fn repo_commit(
         parents: git_detail.commit.parent_oids.clone(),
         author_name: commit.author_name.clone(),
         author_email: commit.author_email.clone(),
-        author_time: commit.author_time.format("%Y-%m-%d %H:%M:%S").to_string(),
+        author_time: commit.author_time.to_rfc3339(),
         committer_name: commit.committer_name.clone(),
         committer_email: commit.committer_email.clone(),
-        committer_time: commit.committer_time.format("%Y-%m-%d %H:%M:%S").to_string(),
+        committer_time: commit.committer_time.to_rfc3339(),
         message: commit.message.clone().unwrap_or_default(),
         diff_stats: git_detail.diff_stats.clone(),
         diff: git_detail.diff_html.clone(),
@@ -279,7 +278,7 @@ pub async fn repo_diff(
             summary: c.summary.clone(),
             author_name: c.author_name.clone(),
             author_email: c.author_email.clone(),
-            committer_time: c.committer_time.format("%Y-%m-%d %H:%M:%S").to_string(),
+            committer_time: c.committer_time.to_rfc3339(),
         })
         .collect();
     
