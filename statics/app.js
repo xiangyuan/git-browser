@@ -173,16 +173,20 @@ function cherryPickSelected() {
         return res.json();
     })
     .then(data => {
+        console.log('Cherry-pick response:', data);
         btn.disabled = false;
         btn.textContent = '🍒 Cherry-pick Selected';
         
         if (data.success) {
-            showMessage(
-                `✅ Successfully cherry-picked ${data.count} commits to ${targetBranch}!\n` +
-                `Next step: Click "Push to Remote" to sync with the server.`,
-                'success'
-            );
-            document.getElementById('push-btn').style.display = 'block';
+            const message = `✅ Successfully cherry-picked ${data.count} commits to ${targetBranch}!\n` +
+                `Next step: Click "Push to Remote" to sync with the server.`;
+            console.log('Showing success message:', message);
+            showMessage(message, 'success');
+            
+            const pushBtn = document.getElementById('push-btn');
+            if (pushBtn) {
+                pushBtn.style.display = 'block';
+            }
             
             checkboxes.forEach(cb => {
                 const row = cb.closest('tr');
@@ -252,12 +256,31 @@ function pushChanges() {
 
 // 显示状态消息
 function showMessage(text, type) {
+    console.log('showMessage called:', { text, type });
     const msgDiv = document.getElementById('status-message');
-    if (!msgDiv) return;
+    console.log('msgDiv element:', msgDiv);
     
-    msgDiv.style.display = 'block';
-    msgDiv.textContent = text;
+    if (!msgDiv) {
+        console.error('status-message element not found');
+        alert(text); // 备用方案：使用 alert
+        return;
+    }
+    
+    // 移除 hidden 类并设置消息类型类
     msgDiv.className = `msg-${type}`;
+    msgDiv.textContent = text;
+    console.log('Message div updated:', { className: msgDiv.className, display: window.getComputedStyle(msgDiv).display });
+    
+    // 滚动到消息位置
+    msgDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    
+    // 成功消息5秒后自动消失，其他消息保持显示
+    if (type === 'success') {
+        setTimeout(() => {
+            msgDiv.className = 'hidden';
+            console.log('Message hidden after timeout');
+        }, 5000);
+    }
 }
 
 // 更新已cherry-pick的数量

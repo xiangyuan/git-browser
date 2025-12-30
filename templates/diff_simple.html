@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ repo_name }} - Diff</title>
-    <link rel="stylesheet" href="/statics/style.css?v=5">
-    <script src="/statics/app.js?v=5" defer></script>
+    <link rel="stylesheet" href="/statics/style.css?v=6">
+    <script src="/statics/app.js?v=7" defer></script>
     <script src="/statics/htmx.min.js"></script>
     <script src="/statics/json-enc.js"></script>
 </head>
@@ -44,13 +44,7 @@
         <div class="diff-actions">
             <span>Found <strong>{{ commits.len() }}</strong> commits <span id="cherry-picked-count" class="cherry-picked-count"></span></span>
             <div style="display: flex; gap: 8px;">
-                <button id="cherry-pick-btn"
-                        hx-post="/{{ repo_name }}/api/cherry-pick"
-                        hx-ext="json-enc"
-                        hx-include="#commits-form, #to-branch"
-                        hx-target="#status-message"
-                        hx-swap="innerHTML show:top"
-                        class="btn-cherry-pick">
+                <button onclick="cherryPickSelected()" id="cherry-pick-btn" class="btn-cherry-pick">
                     🍒 Cherry-pick Selected
                 </button>
                 <button onclick="pushChanges()" id="push-btn" class="btn-push" style="display: none;">
@@ -70,7 +64,7 @@
             ✓ No new commits in {{ to_branch }} - branches are in sync or {{ from_branch }} is ahead
         </p>
         {% else %}
-        <div id="status-message" style="display: none;"></div>
+        <div id="status-message" class="hidden"></div>
         <form id="commits-form">
         <table class="repositories">
             <thead>
