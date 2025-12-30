@@ -163,7 +163,15 @@ function cherryPickSelected() {
             target_branch: targetBranch
         })
     })
-    .then(res => res.json())
+    .then(async res => {
+        // 先检查 HTTP 状态
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+        // 尝试解析 JSON
+        return res.json();
+    })
     .then(data => {
         btn.disabled = false;
         btn.textContent = '🍒 Cherry-pick Selected';
@@ -201,6 +209,7 @@ function cherryPickSelected() {
         btn.disabled = false;
         btn.textContent = '🍒 Cherry-pick Selected';
         showMessage(`❌ Error: ${err.message}`, 'error');
+        console.error('Cherry-pick error:', err);
     });
 }
 
