@@ -342,6 +342,40 @@ pub struct SyncResponse {
     message: String,
 }
 
+/// API: Sync repository by name (for UI usage)
+pub async fn api_sync_repository_by_name(
+    State(ctx): State<Arc<AppContext>>,
+    Path(repo_name): Path<String>,
+) -> Result<Json<SyncResponse>> {
+    let repo = ctx.repository_store
+        .find_by_name(&repo_name)
+        .await?
+        .ok_or_else(|| crate::shared::error::GitxError::RepositoryNotFound(repo_name.clone()))?;
+    
+    let repo_path = std::path::PathBuf::from(&repo.path);
+    
+    // 1. Fetch from remote
+    let result = ctx.git_client.fetch_repository(&repo_path).await?;
+    
+    // 2. Re-index the repository
+    let worker = crate::services::worker::IndexWorker::new(
+        ctx.config.clone(),
+        ctx.repository_store.clone(),
+        ctx.commit_store.clone(),
+        ctx.branch_store.clone(),
+        ctx.git_client.clone(),
+    );
+    worker.index_repository(repo.id, &repo_path).await?;
+    
+    // 3. Update sync time
+    ctx.repository_store.update_sync_time(repo.id).await?;
+    
+    Ok(Json(SyncResponse {
+        success: true,
+        message: format!("Synced {} branches and re-indexed commits", result.branches_updated.len()),
+    }))
+}
+
 /// API: Cherry-pick commits
 #[derive(Deserialize)]
 pub struct CherryPickRequest {

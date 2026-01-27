@@ -44,6 +44,9 @@
         <div class="diff-actions">
             <span>Found <strong>{{ commits.len() }}</strong> commits <span id="cherry-picked-count" class="cherry-picked-count"></span></span>
             <div style="display: flex; gap: 8px;">
+                <button onclick="syncRepository()" id="sync-btn" class="btn-sync" title="Refresh index from git">
+                    🔄 Sync
+                </button>
                 <button onclick="cherryPickSelected()" id="cherry-pick-btn" class="btn-cherry-pick">
                     🍒 Cherry-pick Selected
                 </button>

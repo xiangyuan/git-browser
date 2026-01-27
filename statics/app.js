@@ -135,7 +135,8 @@ function toggleAll(checkbox) {
 // Cherry-pick选中的commits
 function cherryPickSelected() {
     const checkboxes = document.querySelectorAll('.commit-checkbox:checked');
-    const commits = Array.from(checkboxes).map(cb => cb.value);
+    // 获取所有选中的 commits，然后反转顺序（页面上是从新到旧，cherry-pick 需要从旧到新）
+    const commits = Array.from(checkboxes).map(cb => cb.value).reverse();
     
     if (commits.length === 0) {
         showMessage('Please select at least one commit', 'warning');
@@ -290,4 +291,42 @@ function updateCherryPickedCount() {
     if (countSpan) {
         countSpan.textContent = disabledCount > 0 ? `(✓ ${disabledCount} cherry-picked)` : '';
     }
+}
+
+// 手动同步仓库索引
+function syncRepository() {
+    const repoName = document.body.dataset.repoName;
+    const btn = document.getElementById('sync-btn');
+    
+    btn.disabled = true;
+    btn.textContent = '⏳ Syncing...';
+    showMessage('Fetching from remote and re-indexing...', 'info');
+    
+    fetch(`/${repoName}/api/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(async res => {
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+        return res.json();
+    })
+    .then(data => {
+        btn.disabled = false;
+        btn.textContent = '🔄 Sync';
+        
+        if (data.success) {
+            showMessage(`✅ ${data.message}. Refreshing page...`, 'success');
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            showMessage(`❌ Sync failed: ${data.message}`, 'error');
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.textContent = '🔄 Sync';
+        showMessage(`❌ Error: ${err.message}`, 'error');
+    });
 }
