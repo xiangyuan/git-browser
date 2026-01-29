@@ -170,6 +170,42 @@
     }
 }
 
+/* Merge按钮样式 */
+.btn-merge {
+    padding: 6px 12px;
+    background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 100%);
+    color: #fff;
+    border: 1px solid #7c3aed;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.2s;
+    box-shadow: 0 1px 0 rgba(27,31,36,0.1);
+}
+
+.btn-merge:hover {
+    background: linear-gradient(180deg, #7c3aed 0%, #6d28d9 100%);
+    border-color: #6d28d9;
+}
+
+.btn-merge:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+@media (prefers-color-scheme: dark) {
+    .btn-merge {
+        background: linear-gradient(180deg, #7c3aed 0%, #6d28d9 100%);
+        border-color: #6d28d9;
+    }
+    
+    .btn-merge:hover {
+        background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 100%);
+        border-color: #7c3aed;
+    }
+}
+
 /* Cherry-pick操作区域 */
 .diff-actions {
     padding: 12px 20px;

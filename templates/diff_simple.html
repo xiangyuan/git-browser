@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ repo_name }} - Diff</title>
-    <link rel="stylesheet" href="/statics/style.css?v=8">
-    <script src="/statics/app.js?v=10" defer></script>
+    <link rel="stylesheet" href="/statics/style.css?v=11">
+    <script src="/statics/app.js?v=11" defer></script>
     <script src="/statics/htmx.min.js"></script>
     <script src="/statics/json-enc.js"></script>
 </head>
@@ -38,6 +38,7 @@
                 </select>
                 <button type="submit" class="btn-compare">Compare</button>
                 <a href="?o={{ to_branch }}&n={{ from_branch }}" class="btn-swap" style="text-decoration: none; display: inline-block; text-align: center;">⇄ Swap</a>
+                <button type="button" onclick="mergeBranches()" class="btn-merge" title="Merge source branch into target branch">🔀 Merge</button>
             </form>
         </div>
         {% if !commits.is_empty() %}

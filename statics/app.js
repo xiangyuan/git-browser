@@ -337,3 +337,74 @@ function syncRepository() {
         showMessage(`❌ Error: ${err.message}`, 'error');
     });
 }
+
+// Merge branches
+function mergeBranches() {
+    const fromBranch = document.getElementById('from-branch').value;
+    const toBranch = document.getElementById('to-branch').value;
+    const repoName = document.body.dataset.repoName;
+    
+    if (fromBranch === toBranch) {
+        showMessage('⚠️ Source and target branches are the same', 'warning');
+        return;
+    }
+    
+    const confirmMsg = `Merge "${fromBranch}" into "${toBranch}"?\n\nThis will perform a git merge locally. You'll need to push afterwards.`;
+    
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+    
+    // Find the merge button
+    const btns = document.querySelectorAll('.btn-merge');
+    const btn = btns.length > 0 ? btns[0] : null;
+    
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Merging...';
+    }
+    showMessage(`Merging ${fromBranch} into ${toBranch}...`, 'info');
+    
+    fetch(`/${repoName}/api/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            source_branch: fromBranch,
+            target_branch: toBranch
+        })
+    })
+    .then(async res => {
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+        return res.json();
+    })
+    .then(data => {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '🔀 Merge';
+        }
+        
+        if (data.success) {
+            let message = `✅ ${data.message}`;
+            if (!data.message.includes('Already up to date')) {
+                message += `\nNext step: Click "Push to Remote" to sync with the server.`;
+                const pushBtn = document.getElementById('push-btn');
+                if (pushBtn) {
+                    pushBtn.style.display = 'block';
+                }
+            }
+            showMessage(message, 'success');
+        } else {
+            showMessage(`❌ Merge failed: ${data.error}`, 'error');
+        }
+    })
+    .catch(err => {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '🔀 Merge';
+        }
+        showMessage(`❌ Error: ${err.message}`, 'error');
+    });
+}

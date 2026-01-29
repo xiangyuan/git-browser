@@ -746,3 +746,137 @@ async fn get_all_branches(ctx: &AppContext, repo_id: i64) -> Result<Vec<String>>
         .await?;
     Ok(branches.iter().map(|b| b.name.clone()).collect())
 }
+
+/// API: Merge source branch into target branch
+#[derive(Deserialize)]
+pub struct MergeRequest {
+    source_branch: String,
+    target_branch: String,
+}
+
+#[derive(Serialize)]
+pub struct MergeResponse {
+    success: bool,
+    message: Option<String>,
+    error: Option<String>,
+}
+
+pub async fn api_merge(
+    State(ctx): State<Arc<AppContext>>,
+    Path(repo_name): Path<String>,
+    Json(req): Json<MergeRequest>,
+) -> Result<Json<MergeResponse>> {
+    let repo = ctx.repository_store
+        .find_by_name(&repo_name)
+        .await?
+        .ok_or_else(|| crate::shared::error::GitxError::RepositoryNotFound(repo_name.clone()))?;
+    
+    let repo_path = std::path::PathBuf::from(&repo.path);
+    
+    // 1. Fetch latest from remote
+    let fetch_output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("fetch")
+        .arg("origin")
+        .output()
+        .await?;
+    
+    if !fetch_output.status.success() {
+        let error_msg = String::from_utf8_lossy(&fetch_output.stderr).to_string();
+        return Ok(Json(MergeResponse {
+            success: false,
+            message: None,
+            error: Some(format!("Failed to fetch: {}", error_msg)),
+        }));
+    }
+    
+    // 2. Process branch names (remove origin/ prefix if present)
+    let source_branch = if req.source_branch.starts_with("origin/") {
+        req.source_branch.clone()
+    } else {
+        format!("origin/{}", req.source_branch)
+    };
+    
+    let local_target = if req.target_branch.starts_with("origin/") {
+        req.target_branch.strip_prefix("origin/").unwrap().to_string()
+    } else {
+        req.target_branch.clone()
+    };
+    
+    // 3. Checkout target branch
+    let checkout_output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("checkout")
+        .arg("-B")
+        .arg(&local_target)
+        .arg(format!("origin/{}", local_target))
+        .output()
+        .await?;
+    
+    if !checkout_output.status.success() {
+        let error_msg = String::from_utf8_lossy(&checkout_output.stderr).to_string();
+        return Ok(Json(MergeResponse {
+            success: false,
+            message: None,
+            error: Some(format!("Failed to checkout {}: {}", local_target, error_msg)),
+        }));
+    }
+    
+    // 4. Perform merge
+    let merge_output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("merge")
+        .arg(&source_branch)
+        .arg("--no-edit")
+        .output()
+        .await?;
+    
+    if merge_output.status.success() {
+        let stdout_msg = String::from_utf8_lossy(&merge_output.stdout).to_string();
+        
+        // Check if already up-to-date
+        if stdout_msg.contains("Already up to date") || stdout_msg.contains("Already up-to-date") {
+            return Ok(Json(MergeResponse {
+                success: true,
+                message: Some("Already up to date. No merge needed.".to_string()),
+                error: None,
+            }));
+        }
+        
+        Ok(Json(MergeResponse {
+            success: true,
+            message: Some(format!("Successfully merged {} into {}", req.source_branch, local_target)),
+            error: None,
+        }))
+    } else {
+        let error_msg = String::from_utf8_lossy(&merge_output.stderr).to_string();
+        let stdout_msg = String::from_utf8_lossy(&merge_output.stdout).to_string();
+        
+        // Check for merge conflicts
+        if error_msg.contains("CONFLICT") || stdout_msg.contains("CONFLICT") {
+            // Abort the merge to leave repo in clean state
+            let _ = Command::new("git")
+                .arg("-C")
+                .arg(&repo_path)
+                .arg("merge")
+                .arg("--abort")
+                .output()
+                .await;
+            
+            return Ok(Json(MergeResponse {
+                success: false,
+                message: None,
+                error: Some("Merge conflict detected. Please resolve conflicts manually.".to_string()),
+            }));
+        }
+        
+        Ok(Json(MergeResponse {
+            success: false,
+            message: None,
+            error: Some(format!("Merge failed: {}", error_msg)),
+        }))
+    }
+}

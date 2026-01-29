@@ -29,6 +29,7 @@ pub fn create_app_router(ctx: Arc<AppContext>) -> Router {
         .route("/{repo}/api/cherry-pick", post(handlers::repository::api_cherry_pick))
         .route("/{repo}/api/push", post(handlers::repository::api_push))
         .route("/{repo}/api/sync", post(handlers::repository::api_sync_repository_by_name))
+        .route("/{repo}/api/merge", post(handlers::repository::api_merge))
         
         // API 路由
         .nest("/api", api_routes())
