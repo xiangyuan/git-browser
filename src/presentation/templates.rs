@@ -54,8 +54,10 @@ pub struct CommitItem {
     pub summary: String,  // 为模板兼容性添加，与message相同
     pub author_name: String,
     pub author_email: String,
-    pub committer_time: String,
+    pub committer_time: String,   
+     pub is_empty: bool, // 标识是否为空提交（已被 cherry-pick 过）
 }
+
 
 /// 单个提交详情
 #[derive(Template)]

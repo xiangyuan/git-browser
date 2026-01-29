@@ -6,7 +6,9 @@ use axum::{
 };
 use std::sync::Arc;
 use std::fmt;
+use std::collections::HashSet;
 use serde::{Serialize, Deserialize, de::{self, Deserializer, Visitor, SeqAccess}};
+use tokio::process::Command;
 use crate::presentation::routes::AppContext;
 use crate::presentation::dto::RepositoryDto;
 use crate::presentation::templates::*;
@@ -115,6 +117,7 @@ pub async fn repo_log(
             author_name: c.author_name.clone(),
             author_email: c.author_email.clone(),
             committer_time: c.committer_time.to_rfc3339(),
+            is_empty: false,
         })
         .collect();
     
@@ -180,6 +183,7 @@ pub async fn repo_commit(
                 author_name: c.author_name.clone(),
                 author_email: c.author_email.clone(),
                 committer_time: c.committer_time.to_rfc3339(),
+                is_empty: false,
             })
             .collect();
         
@@ -269,16 +273,54 @@ pub async fn repo_diff(
         .find_diff_commits(repo.id, &query.o, &query.n, 1000)
         .await?;
     
+    // 使用 git cherry 检测哪些提交已经被 cherry-pick 过（空提交）
+    // git cherry 会返回 "-" 开头的行表示已存在，"+" 开头表示新提交
+    let repo_path = std::path::PathBuf::from(&repo.path);
+    let cherry_output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("cherry")
+        .arg(format!("origin/{}", query.n))  // upstream (目标分支)
+        .arg(format!("origin/{}", query.o))  // head (源分支)
+        .output()
+        .await
+        .ok();
+    
+    // 解析 git cherry 输出，构建已存在提交的 set
+    let empty_commits: HashSet<String> = cherry_output
+        .filter(|o| o.status.success())
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .filter_map(|line: &str| {
+                    // 格式: "- <sha>" 或 "+ <sha>"
+                    if line.starts_with("- ") {
+                        Some(line[2..].trim().to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<HashSet<String>>()
+        })
+        .unwrap_or_default();
+    
     let commit_items: Vec<CommitItem> = commits
         .iter()
-        .map(|c| CommitItem {
-            sha: c.oid.clone(),
-            sha_short: c.oid[..8.min(c.oid.len())].to_string(),
-            message: c.summary.clone(),
-            summary: c.summary.clone(),
-            author_name: c.author_name.clone(),
-            author_email: c.author_email.clone(),
-            committer_time: c.committer_time.to_rfc3339(),
+        .map(|c| {
+            // 检查该提交是否在 empty_commits 中（完整sha或前缀匹配）
+            let is_empty = empty_commits.iter().any(|ec: &String| 
+                c.oid.starts_with(ec) || ec.starts_with(&c.oid)
+            );
+            CommitItem {
+                sha: c.oid.clone(),
+                sha_short: c.oid[..8.min(c.oid.len())].to_string(),
+                message: c.summary.clone(),
+                summary: c.summary.clone(),
+                author_name: c.author_name.clone(),
+                author_email: c.author_email.clone(),
+                committer_time: c.committer_time.to_rfc3339(),
+                is_empty,
+            }
         })
         .collect();
     
@@ -424,6 +466,7 @@ where
 pub struct CherryPickResponse {
     success: bool,
     count: usize,
+    skipped: usize,
     error: Option<String>,
 }
 
@@ -464,6 +507,7 @@ pub async fn api_cherry_pick(
         return Ok(Json(CherryPickResponse {
             success: false,
             count: 0,
+            skipped: 0,
             error: Some(format!("Failed to fetch: {}", error_msg)),
         }));
     }
@@ -491,12 +535,14 @@ pub async fn api_cherry_pick(
         return Ok(Json(CherryPickResponse {
             success: false,
             count: 0,
+            skipped: 0,
             error: Some(format!("Failed to checkout {}: {}", local_branch, error_msg)),
         }));
     }
     
     // 4. 执行git cherry-pick
     let mut success_count = 0;
+    let mut skipped_count = 0;
     for commit_oid in &req.commits {
         let output = Command::new("git")
             .arg("-C")
@@ -510,7 +556,28 @@ pub async fn api_cherry_pick(
             success_count += 1;
         } else {
             let error_msg = String::from_utf8_lossy(&output.stderr).to_string();
-            // 如果失败，尝试abort
+            let stdout_msg = String::from_utf8_lossy(&output.stdout).to_string();
+            
+            // 检查是否是空提交的情况（提交已存在或无变化）
+            let is_empty_commit = error_msg.contains("nothing to commit") 
+                || error_msg.contains("empty")
+                || error_msg.contains("The previous cherry-pick is now empty")
+                || stdout_msg.contains("nothing to commit");
+            
+            if is_empty_commit {
+                // 跳过空提交，使用 --skip 继续
+                let _ = Command::new("git")
+                    .arg("-C")
+                    .arg(&repo_path)
+                    .arg("cherry-pick")
+                    .arg("--skip")
+                    .output()
+                    .await;
+                skipped_count += 1;
+                continue;
+            }
+            
+            // 其他错误，尝试abort并返回失败
             let _ = Command::new("git")
                 .arg("-C")
                 .arg(&repo_path)
@@ -522,6 +589,7 @@ pub async fn api_cherry_pick(
             return Ok(Json(CherryPickResponse {
                 success: false,
                 count: success_count,
+                skipped: skipped_count,
                 error: Some(format!("Failed at commit {}: {}", commit_oid, error_msg)),
             }));
         }
@@ -530,6 +598,7 @@ pub async fn api_cherry_pick(
     Ok(Json(CherryPickResponse {
         success: true,
         count: success_count,
+        skipped: skipped_count,
         error: None,
     }))
 }

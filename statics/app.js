@@ -179,8 +179,11 @@ function cherryPickSelected() {
         btn.textContent = '🍒 Cherry-pick Selected';
         
         if (data.success) {
-            const message = `✅ Successfully cherry-picked ${data.count} commits to ${targetBranch}!\n` +
-                `Next step: Click "Push to Remote" to sync with the server.`;
+            let message = `✅ Successfully cherry-picked ${data.count} commits to ${targetBranch}!`;
+            if (data.skipped > 0) {
+                message += `\n(${data.skipped} empty commit(s) skipped)`;
+            }
+            message += `\nNext step: Click "Push to Remote" to sync with the server.`;
             console.log('Showing success message:', message);
             showMessage(message, 'success');
             
@@ -207,7 +210,11 @@ function cherryPickSelected() {
             document.getElementById('select-all').checked = false;
             updateCherryPickedCount();
         } else {
-            showMessage(`❌ Cherry-pick failed: ${data.error}\n\nPicked ${data.count} commits before failure.`, 'error');
+            let errorMsg = `❌ Cherry-pick failed: ${data.error}\n\nPicked ${data.count} commits before failure.`;
+            if (data.skipped > 0) {
+                errorMsg += `\n(${data.skipped} empty commit(s) skipped)`;
+            }
+            showMessage(errorMsg, 'error');
         }
     })
     .catch(err => {

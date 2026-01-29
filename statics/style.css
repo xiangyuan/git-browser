@@ -462,6 +462,32 @@ table.repositories tbody tr.separator {
     height: 1rem
 }
 
+/* Empty commit (already cherry-picked) styles */
+table.repositories tbody tr.empty-commit {
+    opacity: 0.5;
+    background-color: #f0f0f0 !important;
+}
+
+table.repositories tbody tr.empty-commit:hover {
+    opacity: 0.7;
+}
+
+.empty-tag {
+    color: #888;
+    font-size: 0.9em;
+    margin-right: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+    table.repositories tbody tr.empty-commit {
+        background-color: #1a1a1a !important;
+    }
+    
+    .empty-tag {
+        color: #666;
+    }
+}
+
 table.repositories tbody pre {
     margin: 0
 }
