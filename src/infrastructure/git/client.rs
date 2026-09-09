@@ -518,34 +518,6 @@ impl GitPort for Git2Client {
         })
         .await
     }
-
-    async fn contained_in_ref(
-        &self,
-        path: &Path,
-        descendant_spec: &str,
-        oids: &[String],
-    ) -> Result<std::collections::HashSet<String>> {
-        let path = path.to_path_buf();
-        let descendant_spec = descendant_spec.to_string();
-        let oids = oids.to_vec();
-
-        Self::run_blocking(move || {
-            use std::collections::HashSet;
-            let repo = Repository::open(&path)?;
-            let tip = repo.revparse_single(&descendant_spec)?.id();
-            let mut contained = HashSet::new();
-            for oid_str in oids {
-                let Ok(oid) = Oid::from_str(&oid_str) else {
-                    continue;
-                };
-                if oid == tip || repo.graph_descendant_of(tip, oid).unwrap_or(false) {
-                    contained.insert(oid_str);
-                }
-            }
-            Ok(contained)
-        })
-        .await
-    }
 }
 
 /// `ancestor` 是否为 `descendant` 的祖先（OID 相等视为是）

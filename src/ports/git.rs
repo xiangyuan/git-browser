@@ -57,14 +57,6 @@ pub trait GitPort: Send + Sync {
 
     /// 将 UI 上的分支名解析为对比用的 git spec，并判断本地是否领先远程
     async fn inspect_diff_ref(&self, path: &Path, branch: &str) -> Result<DiffRef>;
-
-    /// 返回 `oids` 里已经包含在 `descendant_spec` 历史中的那些（含相等）
-    async fn contained_in_ref(
-        &self,
-        path: &Path,
-        descendant_spec: &str,
-        oids: &[String],
-    ) -> Result<std::collections::HashSet<String>>;
 }
 
 /// 分支对比时实际使用的 git 引用

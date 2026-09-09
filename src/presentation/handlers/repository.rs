@@ -276,25 +276,20 @@ pub async fn repo_diff(
     let repo_path = std::path::PathBuf::from(&repo.path);
     let to_ref = ctx.git_client.inspect_diff_ref(&repo_path, &query.n).await?;
 
-    // 增量索引漏掉的「其实已经 merge 进目标分支」的提交，从列表里拿掉。
-    // 不改变 cherry-pick 的匹配方式，只补 merge 后 DB 没跟上的那部分。
-    let commit_oids: Vec<String> = commits.iter().map(|c| c.oid.clone()).collect();
-    let already_merged = ctx.git_client
-        .contained_in_ref(&repo_path, &origin_branch_name(&query.n), &commit_oids)
-        .await
-        .unwrap_or_default();
-
-    // git cherry 只用来标记空提交（灰显），不从列表里删除。
-    // 分支名本身已经是 origin/xxx 时不要再拼一层 origin/。
-    let cherry_output = Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .arg("cherry")
-        .arg(origin_branch_name(&query.n))
-        .arg(origin_branch_name(&query.o))
-        .output()
-        .await
-        .ok();
+    // git cherry 只用来灰显空提交。大范围时 patch-id 会非常慢，超时则跳过灰显。
+    let cherry_output = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        Command::new("git")
+            .arg("-C")
+            .arg(&repo_path)
+            .arg("cherry")
+            .arg(origin_branch_name(&query.n))
+            .arg(origin_branch_name(&query.o))
+            .output(),
+    )
+    .await
+    .ok()
+    .and_then(|r| r.ok());
     
     let empty_commits: HashSet<String> = cherry_output
         .filter(|o| o.status.success())
@@ -314,7 +309,6 @@ pub async fn repo_diff(
     
     let commit_items: Vec<CommitItem> = commits
         .iter()
-        .filter(|c| !already_merged.contains(&c.oid))
         .map(|c| {
             let is_empty = empty_commits.iter().any(|ec: &String| 
                 c.oid.starts_with(ec) || ec.starts_with(&c.oid)
