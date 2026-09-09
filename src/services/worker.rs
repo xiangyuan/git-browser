@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use chrono::DateTime;
@@ -41,12 +42,18 @@ impl IndexWorker {
     pub async fn index_repository(&self, repository_id: i64, path: &Path) -> Result<IndexResult> {
         let mut result = IndexResult::default();
 
-        // 获取所有分支
+        // 先读出旧 tip，再覆盖 branches 表。增量索引必须用「上一次的 tip」，
+        // 不能用 committer_time 最大的那条（merge 进来的更早提交会被漏掉）。
+        let existing_branches = self.branch_store.find_by_repository(repository_id).await?;
+        let old_tips: HashMap<String, String> = existing_branches
+            .into_iter()
+            .map(|b| (b.name, b.target_oid))
+            .collect();
+
         let branches = self.git_client.list_branches(path).await?;
         
         info!("Found {} branches to index", branches.len());
 
-        // 将分支信息转换为实体并保存到数据库
         let branch_entities: Vec<Branch> = branches
             .iter()
             .map(|b| Branch {
@@ -59,12 +66,7 @@ impl IndexWorker {
             })
             .collect();
 
-        if !branch_entities.is_empty() {
-            self.branch_store.save_many(&branch_entities).await?;
-            info!("Saved {} branches to database", branch_entities.len());
-        }
-
-        for branch in branches {
+        for branch in &branches {
             // 只索引 remote 分支（格式如 origin/main）
             if !branch.name.starts_with("origin/") {
                 continue;
@@ -72,11 +74,17 @@ impl IndexWorker {
 
             debug!("Indexing branch: {}", branch.name);
 
-            // 构建完整的 ref 路径用于 get_commits
             let ref_name = format!("refs/remotes/{}", branch.name);
+            let previous_tip = old_tips.get(&branch.name).map(String::as_str);
             
-            // 但存储时使用简短名称（origin/main）
-            match self.index_branch(repository_id, path, &ref_name, &branch.name).await {
+            match self.index_branch(
+                repository_id,
+                path,
+                &ref_name,
+                &branch.name,
+                previous_tip,
+                &branch.target_oid,
+            ).await {
                 Ok(count) => {
                     result.commits_indexed += count;
                     result.branches_indexed += 1;
@@ -88,6 +96,11 @@ impl IndexWorker {
             }
         }
 
+        if !branch_entities.is_empty() {
+            self.branch_store.save_many(&branch_entities).await?;
+            info!("Saved {} branches to database", branch_entities.len());
+        }
+
         info!(
             "Repository indexing completed: {} commits, {} branches",
             result.commits_indexed,
@@ -97,28 +110,83 @@ impl IndexWorker {
         Ok(result)
     }
 
+    /// 把本地分支上尚未推送的提交索引到对应的 origin/* 记录里。
+    /// merge / cherry-pick 之后 origin 还没动，必须走本地 ref 才能让 log/diff 立刻更新。
+    pub async fn index_local_as_remote(
+        &self,
+        repository_id: i64,
+        path: &Path,
+        local_branch: &str,
+        remote_branch_name: &str,
+    ) -> Result<usize> {
+        let local_tip = self.git_client.rev_parse(path, "HEAD").await?;
+        let existing = self.branch_store.find_by_repository(repository_id).await?;
+        let previous_tip = existing
+            .iter()
+            .find(|b| b.name == remote_branch_name)
+            .map(|b| b.target_oid.as_str());
+        let ref_name = format!("refs/heads/{}", local_branch);
+
+        self.index_branch(
+            repository_id,
+            path,
+            &ref_name,
+            remote_branch_name,
+            previous_tip,
+            &local_tip,
+        ).await
+    }
+
     /// 索引单个分支（增量更新）
-    async fn index_branch(
+    pub async fn index_branch(
         &self,
         repository_id: i64,
         path: &Path,
         ref_name: &str,        // 完整ref路径，如 refs/remotes/origin/main
         branch_name: &str,     // 简短名称，如 origin/main
+        previous_tip: Option<&str>,
+        current_tip: &str,
     ) -> Result<usize> {
-        // 获取最后索引的提交
-        let last_indexed = self.commit_store.get_latest_commit(repository_id, branch_name).await?;
-        let last_indexed_oid = last_indexed.map(|c| c.oid);
-
-        if let Some(ref oid) = last_indexed_oid {
-            debug!("Found last indexed commit for {}: {}", branch_name, oid);
+        if previous_tip == Some(current_tip) {
+            debug!("Branch {} tip unchanged ({}), skip", branch_name, current_tip);
+            return Ok(0);
         }
 
-        // 获取新提交
+        let mut since_oid: Option<String> = None;
+
+        if let Some(old_tip) = previous_tip {
+            let ancestor = self
+                .git_client
+                .is_ancestor(path, old_tip, current_tip)
+                .await
+                .unwrap_or(false);
+            if ancestor {
+                since_oid = Some(old_tip.to_string());
+                debug!(
+                    "Incremental index for {} ({}..{})",
+                    branch_name, old_tip, current_tip
+                );
+            } else {
+                info!(
+                    "History rewritten for {} ({} -> {}), rebuilding commit index",
+                    branch_name, old_tip, current_tip
+                );
+                self.commit_store
+                    .delete_by_branch(repository_id, branch_name)
+                    .await?;
+            }
+        } else {
+            // 第一次索引该分支：清掉可能残留的旧行
+            self.commit_store
+                .delete_by_branch(repository_id, branch_name)
+                .await?;
+        }
+
         let commits = self.git_client.get_commits(
             path,
-            ref_name,  // 使用完整ref路径
+            ref_name,
             self.config.indexer.max_commits_per_branch,
-            last_indexed_oid.as_deref(),
+            since_oid.as_deref(),
         ).await?;
 
         if commits.is_empty() {
@@ -126,14 +194,13 @@ impl IndexWorker {
             return Ok(0);
         }
 
-        // 转换为领域实体
         let domain_commits: Vec<Commit> = commits
             .into_iter()
             .map(|c| {
                 Commit::new(
                     repository_id,
                     c.oid,
-                    branch_name.to_string(),  // 存储简短名称
+                    branch_name.to_string(),
                     c.author_name,
                     c.author_email,
                     DateTime::from_timestamp(c.author_time, 0).unwrap(),
@@ -149,7 +216,6 @@ impl IndexWorker {
 
         let count = domain_commits.len();
 
-        // 使用bulk_insert批量插入，比逐个save快很多
         match self.commit_store.bulk_insert(&domain_commits).await {
             Ok(inserted) => {
                 info!("Indexed {} commits for branch {}", inserted, branch_name);

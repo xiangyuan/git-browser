@@ -93,4 +93,5 @@ pub struct DiffTemplate {
     pub to_branch: String,
     pub branches: Vec<String>,
     pub commits: Vec<CommitItem>,
+    pub needs_push: bool,
 }

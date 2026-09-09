@@ -271,6 +271,15 @@ impl CommitPort for SqliteCommitRepository {
         Ok(())
     }
 
+    async fn delete_by_branch(&self, repository_id: i64, branch: &str) -> Result<()> {
+        sqlx::query("DELETE FROM commits WHERE repository_id = ? AND branch = ?")
+            .bind(repository_id)
+            .bind(branch)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     async fn count_by_repository(&self, repository_id: i64, branch: Option<&str>) -> Result<i64> {
         let count: i64 = if let Some(branch_name) = branch {
             sqlx::query_scalar(

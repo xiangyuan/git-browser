@@ -33,6 +33,9 @@ pub trait CommitPort: Send + Sync {
     /// 删除仓库的所有提交
     async fn delete_by_repository(&self, repository_id: i64) -> Result<()>;
 
+    /// 删除某分支上已索引的提交（历史被改写时重建索引）
+    async fn delete_by_branch(&self, repository_id: i64, branch: &str) -> Result<()>;
+
     /// 统计提交数量
     async fn count_by_repository(&self, repository_id: i64, branch: Option<&str>) -> Result<i64>;
     

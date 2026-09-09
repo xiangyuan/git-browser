@@ -266,34 +266,42 @@ pub async fn repo_diff(
         .map(|b| b.name.clone())
         .collect();
     
-    // 使用数据库中已索引的commits进行对比
-    // 通过 author_name + summary + committer_time 识别相同的逻辑commit
-    // 这样可以正确处理cherry-pick的情况
+    // 沿用原来的对比：两边索引里按 (author_time, summary) 认同一条逻辑提交，
+    // 这样 cherry-pick（oid 不同、作者时间和标题相同）会被当成已存在。
+    // 不能改成 git log A..B：那是按 oid/祖先关系，cherry-pick 会整批冒出来。
     let commits = ctx.commit_store
         .find_diff_commits(repo.id, &query.o, &query.n, 1000)
         .await?;
-    
-    // 使用 git cherry 检测哪些提交已经被 cherry-pick 过（空提交）
-    // git cherry 会返回 "-" 开头的行表示已存在，"+" 开头表示新提交
+
     let repo_path = std::path::PathBuf::from(&repo.path);
+    let to_ref = ctx.git_client.inspect_diff_ref(&repo_path, &query.n).await?;
+
+    // 增量索引漏掉的「其实已经 merge 进目标分支」的提交，从列表里拿掉。
+    // 不改变 cherry-pick 的匹配方式，只补 merge 后 DB 没跟上的那部分。
+    let commit_oids: Vec<String> = commits.iter().map(|c| c.oid.clone()).collect();
+    let already_merged = ctx.git_client
+        .contained_in_ref(&repo_path, &origin_branch_name(&query.n), &commit_oids)
+        .await
+        .unwrap_or_default();
+
+    // git cherry 只用来标记空提交（灰显），不从列表里删除。
+    // 分支名本身已经是 origin/xxx 时不要再拼一层 origin/。
     let cherry_output = Command::new("git")
         .arg("-C")
         .arg(&repo_path)
         .arg("cherry")
-        .arg(format!("origin/{}", query.n))  // upstream (目标分支)
-        .arg(format!("origin/{}", query.o))  // head (源分支)
+        .arg(origin_branch_name(&query.n))
+        .arg(origin_branch_name(&query.o))
         .output()
         .await
         .ok();
     
-    // 解析 git cherry 输出，构建已存在提交的 set
     let empty_commits: HashSet<String> = cherry_output
         .filter(|o| o.status.success())
         .map(|o| {
             String::from_utf8_lossy(&o.stdout)
                 .lines()
                 .filter_map(|line: &str| {
-                    // 格式: "- <sha>" 或 "+ <sha>"
                     if line.starts_with("- ") {
                         Some(line[2..].trim().to_string())
                     } else {
@@ -306,8 +314,8 @@ pub async fn repo_diff(
     
     let commit_items: Vec<CommitItem> = commits
         .iter()
+        .filter(|c| !already_merged.contains(&c.oid))
         .map(|c| {
-            // 检查该提交是否在 empty_commits 中（完整sha或前缀匹配）
             let is_empty = empty_commits.iter().any(|ec: &String| 
                 c.oid.starts_with(ec) || ec.starts_with(&c.oid)
             );
@@ -331,6 +339,7 @@ pub async fn repo_diff(
         to_branch: query.n.clone(),
         branches: branch_names,
         commits: commit_items,
+        needs_push: to_ref.local_ahead,
     };
     
     Ok(Html(template.render()?))
@@ -595,6 +604,10 @@ pub async fn api_cherry_pick(
         }
     }
     
+    if let Err(e) = reindex_local_target(&ctx, repo.id, &repo_path, &local_branch).await {
+        tracing::error!("Failed to reindex after cherry-pick: {}", e);
+    }
+
     Ok(Json(CherryPickResponse {
         success: true,
         count: success_count,
@@ -647,18 +660,7 @@ pub async fn api_push(
         .await?;
     
     if output.status.success() {
-        // 触发索引更新，确保前端 Diff 视图能及时刷新
-        let worker = IndexWorker::new(
-            ctx.config.clone(),
-            ctx.repository_store.clone(),
-            ctx.commit_store.clone(),
-            ctx.branch_store.clone(),
-            ctx.git_client.clone(),
-        );
-        // 忽略索引错误，不影响 Push 结果
-        if let Err(e) = worker.index_repository(repo.id, &repo_path).await {
-            tracing::error!("Failed to index repository after push: {}", e);
-        }
+        reindex_repository(&ctx, repo.id, &repo_path).await;
 
         Ok(Json(PushResponse {
             success: true,
@@ -669,7 +671,6 @@ pub async fn api_push(
         
         // 如果是因为远程有更新导致失败（non-fast-forward），尝试 pull --rebase
         if error_msg.contains("rejected") || error_msg.contains("fetch first") {
-            // 尝试 pull --rebase
             let pull_output = Command::new("git")
                 .arg("-C")
                 .arg(&repo_path)
@@ -679,21 +680,8 @@ pub async fn api_push(
                 .arg(branch_name)
                 .output()
                 .await?;
-// 触发索引更新
-                    let worker = IndexWorker::new(
-                        ctx.config.clone(),
-                        ctx.repository_store.clone(),
-                        ctx.commit_store.clone(),
-                        ctx.branch_store.clone(),
-                        ctx.git_client.clone(),
-                    );
-                    if let Err(e) = worker.index_repository(repo.id, &repo_path).await {
-                        tracing::error!("Failed to index repository after auto-rebase push: {}", e);
-                    }
 
-                    
             if pull_output.status.success() {
-                // Rebase 成功，再次尝试 Push
                 let push_retry = Command::new("git")
                     .arg("-C")
                     .arg(&repo_path)
@@ -704,6 +692,7 @@ pub async fn api_push(
                     .await?;
                 
                 if push_retry.status.success() {
+                    reindex_repository(&ctx, repo.id, &repo_path).await;
                     return Ok(Json(PushResponse {
                         success: true,
                         error: None,
@@ -716,7 +705,6 @@ pub async fn api_push(
                     }));
                 }
             } else {
-                // Rebase 失败（可能有冲突），尝试 abort
                 let _ = Command::new("git")
                     .arg("-C")
                     .arg(&repo_path)
@@ -845,6 +833,10 @@ pub async fn api_merge(
                 error: None,
             }));
         }
+
+        if let Err(e) = reindex_local_target(&ctx, repo.id, &repo_path, &local_target).await {
+            tracing::error!("Failed to reindex after merge: {}", e);
+        }
         
         Ok(Json(MergeResponse {
             success: true,
@@ -879,4 +871,45 @@ pub async fn api_merge(
             error: Some(format!("Merge failed: {}", error_msg)),
         }))
     }
+}
+
+fn strip_origin_prefix(branch: &str) -> &str {
+    branch.strip_prefix("origin/").unwrap_or(branch)
+}
+
+fn origin_branch_name(branch: &str) -> String {
+    if branch.starts_with("origin/") {
+        branch.to_string()
+    } else {
+        format!("origin/{}", branch)
+    }
+}
+
+fn make_worker(ctx: &AppContext) -> IndexWorker {
+    IndexWorker::new(
+        ctx.config.clone(),
+        ctx.repository_store.clone(),
+        ctx.commit_store.clone(),
+        ctx.branch_store.clone(),
+        ctx.git_client.clone(),
+    )
+}
+
+async fn reindex_repository(ctx: &AppContext, repo_id: i64, repo_path: &std::path::Path) {
+    if let Err(e) = make_worker(ctx).index_repository(repo_id, repo_path).await {
+        tracing::error!("Failed to index repository: {}", e);
+    }
+}
+
+async fn reindex_local_target(
+    ctx: &AppContext,
+    repo_id: i64,
+    repo_path: &std::path::Path,
+    local_branch: &str,
+) -> Result<()> {
+    let remote_name = origin_branch_name(local_branch);
+    make_worker(ctx)
+        .index_local_as_remote(repo_id, repo_path, strip_origin_prefix(local_branch), &remote_name)
+        .await?;
+    Ok(())
 }

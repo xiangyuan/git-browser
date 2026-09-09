@@ -43,6 +43,37 @@ pub trait GitPort: Send + Sync {
         new_branch: &str,
         limit: usize,
     ) -> Result<Vec<GitCommit>>;
+
+    /// 判断 `ancestor_oid` 是否为 `descendant_oid` 的祖先（含相等）
+    async fn is_ancestor(
+        &self,
+        path: &Path,
+        ancestor_oid: &str,
+        descendant_oid: &str,
+    ) -> Result<bool>;
+
+    /// 解析 `spec`（如 HEAD、refs/heads/main）为完整 OID
+    async fn rev_parse(&self, path: &Path, spec: &str) -> Result<String>;
+
+    /// 将 UI 上的分支名解析为对比用的 git spec，并判断本地是否领先远程
+    async fn inspect_diff_ref(&self, path: &Path, branch: &str) -> Result<DiffRef>;
+
+    /// 返回 `oids` 里已经包含在 `descendant_spec` 历史中的那些（含相等）
+    async fn contained_in_ref(
+        &self,
+        path: &Path,
+        descendant_spec: &str,
+        oids: &[String],
+    ) -> Result<std::collections::HashSet<String>>;
+}
+
+/// 分支对比时实际使用的 git 引用
+#[derive(Debug, Clone)]
+pub struct DiffRef {
+    /// 用于 `git log` / `git cherry` 的 spec，例如 `main` 或 `origin/main`
+    pub spec: String,
+    /// 本地分支存在且是远程跟踪分支的后代（本地有未推送的 merge/cherry-pick）
+    pub local_ahead: bool,
 }
 
 /// Fetch 操作结果

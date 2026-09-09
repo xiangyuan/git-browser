@@ -3,7 +3,7 @@ use git2::{Oid, Repository, Sort, DiffOptions, DiffFormat};
 use std::path::Path;
 use crate::ports::git::{
     GitPort, FetchResult, GitCommit, GitBranch, GitTag, 
-    GitCommitDetail, GitDiff, GitDiffPatch
+    GitCommitDetail, GitDiff, GitDiffPatch, DiffRef
 };
 use crate::shared::result::Result;
 use crate::shared::error::GitxError;
@@ -121,33 +121,40 @@ impl GitPort for Git2Client {
             let mut revwalk = repo.revwalk()?;
             revwalk.set_sorting(Sort::TIME)?;
             revwalk.push_ref(&branch)?;
-            
-            let mut commits = Vec::new();
-            let since_oid_parsed = if let Some(ref oid_str) = since_oid {
-                Some(Oid::from_str(oid_str)?)
-            } else {
-                None
-            };
-            
-            for (idx, oid) in revwalk.enumerate() {
-                if idx >= limit {
-                    break;
-                }
-                
-                let oid = oid?;
-                
-                // 如果找到起始点，停止
-                if let Some(since) = since_oid_parsed {
-                    if oid == since {
-                        break;
+
+            // since_oid 语义是 `git log since..HEAD`：隐藏该提交及其祖先。
+            // 绝不能“按时间走到 since 就停”——merge 进来的更早提交会被漏掉。
+            if let Some(ref oid_str) = since_oid {
+                match Oid::from_str(oid_str) {
+                    Ok(oid) => {
+                        if let Err(e) = revwalk.hide(oid) {
+                            tracing::warn!(
+                                "Failed to hide since_oid {} on {}: {}; walking without hide",
+                                oid_str,
+                                branch,
+                                e
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Invalid since_oid {}: {}", oid_str, e);
                     }
                 }
-                
+            }
+            
+            let mut commits = Vec::new();
+            
+            for oid in revwalk {
+                let oid = oid?;
                 let commit = repo.find_commit(oid)?;
                 
                 // 跳过合并提交
                 if commit.parent_count() > 1 {
                     continue;
+                }
+
+                if commits.len() >= limit {
+                    break;
                 }
                 
                 let author = commit.author();
@@ -470,5 +477,318 @@ impl GitPort for Git2Client {
             Ok(commits)
         })
         .await
+    }
+
+    async fn is_ancestor(
+        &self,
+        path: &Path,
+        ancestor_oid: &str,
+        descendant_oid: &str,
+    ) -> Result<bool> {
+        let path = path.to_path_buf();
+        let ancestor_oid = ancestor_oid.to_string();
+        let descendant_oid = descendant_oid.to_string();
+
+        Self::run_blocking(move || {
+            let repo = Repository::open(&path)?;
+            Ok(is_ancestor_sync(&repo, &ancestor_oid, &descendant_oid))
+        })
+        .await
+    }
+
+    async fn rev_parse(&self, path: &Path, spec: &str) -> Result<String> {
+        let path = path.to_path_buf();
+        let spec = spec.to_string();
+
+        Self::run_blocking(move || {
+            let repo = Repository::open(&path)?;
+            let obj = repo.revparse_single(&spec)?;
+            Ok(obj.id().to_string())
+        })
+        .await
+    }
+
+    async fn inspect_diff_ref(&self, path: &Path, branch: &str) -> Result<DiffRef> {
+        let path = path.to_path_buf();
+        let branch = branch.to_string();
+
+        Self::run_blocking(move || {
+            let repo = Repository::open(&path)?;
+            Ok(inspect_diff_ref_sync(&repo, &branch))
+        })
+        .await
+    }
+
+    async fn contained_in_ref(
+        &self,
+        path: &Path,
+        descendant_spec: &str,
+        oids: &[String],
+    ) -> Result<std::collections::HashSet<String>> {
+        let path = path.to_path_buf();
+        let descendant_spec = descendant_spec.to_string();
+        let oids = oids.to_vec();
+
+        Self::run_blocking(move || {
+            use std::collections::HashSet;
+            let repo = Repository::open(&path)?;
+            let tip = repo.revparse_single(&descendant_spec)?.id();
+            let mut contained = HashSet::new();
+            for oid_str in oids {
+                let Ok(oid) = Oid::from_str(&oid_str) else {
+                    continue;
+                };
+                if oid == tip || repo.graph_descendant_of(tip, oid).unwrap_or(false) {
+                    contained.insert(oid_str);
+                }
+            }
+            Ok(contained)
+        })
+        .await
+    }
+}
+
+/// `ancestor` 是否为 `descendant` 的祖先（OID 相等视为是）
+fn is_ancestor_sync(repo: &Repository, ancestor_oid: &str, descendant_oid: &str) -> bool {
+    let Ok(ancestor) = Oid::from_str(ancestor_oid) else {
+        return false;
+    };
+    let Ok(descendant) = Oid::from_str(descendant_oid) else {
+        return false;
+    };
+    if ancestor == descendant {
+        return true;
+    }
+    repo.graph_descendant_of(descendant, ancestor).unwrap_or(false)
+}
+
+/// 对比时优先使用“领先远程”的本地分支，这样本地 merge 后立刻能反映最新差异。
+fn inspect_diff_ref_sync(repo: &Repository, branch: &str) -> DiffRef {
+    let short = branch.strip_prefix("origin/").unwrap_or(branch);
+    let remote_spec = if branch.starts_with("origin/") {
+        branch.to_string()
+    } else {
+        format!("origin/{}", short)
+    };
+
+    let local_oid = repo
+        .revparse_single(&format!("refs/heads/{}", short))
+        .ok()
+        .map(|obj| obj.id());
+    let remote_oid = repo
+        .revparse_single(&format!("refs/remotes/origin/{}", short))
+        .ok()
+        .map(|obj| obj.id());
+
+    match (local_oid, remote_oid) {
+        (Some(local), Some(remote)) if local == remote => DiffRef {
+            spec: remote_spec,
+            local_ahead: false,
+        },
+        (Some(local), Some(remote)) => {
+            let ahead = repo.graph_descendant_of(local, remote).unwrap_or(false);
+            if ahead {
+                DiffRef {
+                    spec: short.to_string(),
+                    local_ahead: true,
+                }
+            } else {
+                DiffRef {
+                    spec: remote_spec,
+                    local_ahead: false,
+                }
+            }
+        }
+        (Some(_), None) => DiffRef {
+            spec: short.to_string(),
+            local_ahead: true,
+        },
+        (None, _) => DiffRef {
+            spec: remote_spec,
+            local_ahead: false,
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use git2::{RepositoryInitOptions, Signature, Time};
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    struct TempGit {
+        path: PathBuf,
+    }
+
+    impl Drop for TempGit {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn init_temp() -> TempGit {
+        let path = std::env::temp_dir().join(format!("gitx-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&path).unwrap();
+        let mut opts = RepositoryInitOptions::new();
+        opts.initial_head("main");
+        Repository::init_opts(&path, &opts).unwrap();
+        let repo = Repository::open(&path).unwrap();
+        let mut cfg = repo.config().unwrap();
+        cfg.set_str("user.name", "Test").unwrap();
+        cfg.set_str("user.email", "test@example.com").unwrap();
+        cfg.set_bool("commit.gpgsign", false).unwrap();
+        TempGit { path }
+    }
+
+    fn git(path: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .current_dir(path)
+            .env("GIT_AUTHOR_NAME", "Test")
+            .env("GIT_AUTHOR_EMAIL", "test@example.com")
+            .env("GIT_COMMITTER_NAME", "Test")
+            .env("GIT_COMMITTER_EMAIL", "test@example.com")
+            .args(["-c", "commit.gpgsign=false", "-c", "user.name=Test", "-c", "user.email=test@example.com"])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: stdout={} stderr={}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn write_commit(path: &Path, message: &str, seconds: i64) -> String {
+        let repo = Repository::open(path).unwrap();
+        let filename = format!("{}.txt", message.replace(' ', "-"));
+        fs::write(path.join(&filename), format!("{}\n{}", message, seconds)).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(&filename)).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let sig = Signature::new("Test", "test@example.com", &Time::new(seconds, 0)).unwrap();
+        let parent = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
+        let oid = if let Some(ref p) = parent {
+            repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &[p]).unwrap()
+        } else {
+            repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &[]).unwrap()
+        };
+        oid.to_string()
+    }
+
+    fn setup_merge_repo() -> (TempGit, String, String, String) {
+        let tmp = init_temp();
+        let path = tmp.path.as_path();
+
+        let base = write_commit(path, "base", 1000);
+        git(path, &["checkout", "-b", "feature"]);
+        let old_feature = write_commit(path, "old-feature", 1100);
+        git(path, &["checkout", "main"]);
+        let main_new = write_commit(path, "main-new", 5000);
+        git(path, &["checkout", "feature"]);
+        let _new_feature = write_commit(path, "new-feature", 6000);
+        git(path, &["checkout", "main"]);
+        git(path, &["merge", "feature", "--no-edit"]);
+
+        (tmp, base, old_feature, main_new)
+    }
+
+    #[tokio::test]
+    async fn incremental_index_after_merge_includes_older_side_commits() {
+        let (tmp, base, old_feature, main_new) = setup_merge_repo();
+        let client = Git2Client::new();
+
+        let commits = client
+            .get_commits(&tmp.path, "refs/heads/main", 100, Some(&main_new))
+            .await
+            .unwrap();
+        let oids: Vec<&str> = commits.iter().map(|c| c.oid.as_str()).collect();
+
+        assert!(
+            oids.contains(&old_feature.as_str()),
+            "merged-in older commit must be indexed; got {:?}",
+            oids
+        );
+        assert!(
+            commits.iter().any(|c| c.summary == "new-feature"),
+            "newer feature commit must be indexed; got {:?}",
+            commits.iter().map(|c| c.summary.clone()).collect::<Vec<_>>()
+        );
+        assert!(
+            !oids.contains(&base.as_str()),
+            "common ancestor should be hidden; got {:?}",
+            oids
+        );
+        assert!(
+            !oids.contains(&main_new.as_str()),
+            "old tip should be hidden; got {:?}",
+            oids
+        );
+        assert!(
+            commits.iter().all(|c| c.summary != ""),
+            "merge commit itself should be skipped"
+        );
+    }
+
+    #[tokio::test]
+    async fn branch_diff_is_empty_after_merge() {
+        let (tmp, _, _, _) = setup_merge_repo();
+        let client = Git2Client::new();
+
+        let commits = client
+            .get_branch_diff_commits(&tmp.path, "main", "feature", 100)
+            .await
+            .unwrap();
+        assert!(
+            commits.is_empty(),
+            "after merge, feature should have no unique commits; got {:?}",
+            commits.iter().map(|c| c.summary.clone()).collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test]
+    async fn inspect_diff_ref_prefers_local_when_ahead_of_origin() {
+        let tmp = init_temp();
+        let path = tmp.path.as_path();
+        let remote_tip = write_commit(path, "on-remote", 1000);
+        git(path, &["update-ref", "refs/remotes/origin/main", &remote_tip]);
+
+        let _local = write_commit(path, "local-ahead", 2000);
+        let repo = Repository::open(path).unwrap();
+        let diff_ref = inspect_diff_ref_sync(&repo, "origin/main");
+
+        assert!(diff_ref.local_ahead);
+        assert_eq!(diff_ref.spec, "main");
+    }
+
+    #[tokio::test]
+    async fn inspect_diff_ref_uses_origin_when_in_sync() {
+        let tmp = init_temp();
+        let path = tmp.path.as_path();
+        let tip = write_commit(path, "synced", 1000);
+        git(path, &["update-ref", "refs/remotes/origin/main", &tip]);
+
+        let repo = Repository::open(path).unwrap();
+        let diff_ref = inspect_diff_ref_sync(&repo, "origin/main");
+
+        assert!(!diff_ref.local_ahead);
+        assert_eq!(diff_ref.spec, "origin/main");
+    }
+
+    #[test]
+    fn ancestor_check_handles_equal_and_descendant() {
+        let (tmp, base, _, main_new) = setup_merge_repo();
+        let repo = Repository::open(&tmp.path).unwrap();
+        let head = repo.head().unwrap().peel_to_commit().unwrap().id().to_string();
+
+        assert!(is_ancestor_sync(&repo, &base, &head));
+        assert!(is_ancestor_sync(&repo, &main_new, &head));
+        assert!(is_ancestor_sync(&repo, &head, &head));
+        assert!(!is_ancestor_sync(&repo, &head, &base));
     }
 }
