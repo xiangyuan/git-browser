@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ repo_name }} - Diff</title>
-    <link rel="stylesheet" href="/statics/style.css?v=11">
-    <script src="/statics/app.js?v=11" defer></script>
+    <link rel="stylesheet" href="/statics/style.css?v=12">
+    <script src="/statics/app.js?v=12" defer></script>
     <script src="/statics/htmx.min.js"></script>
     <script src="/statics/json-enc.js"></script>
 </head>
@@ -41,34 +41,48 @@
                 <button type="button" onclick="mergeBranches()" class="btn-merge" title="Merge source branch into target branch">🔀 Merge</button>
             </form>
         </div>
-        {% if !commits.is_empty() %}
         <div class="diff-actions">
-            <span>Found <strong>{{ commits.len() }}</strong> commits <span id="cherry-picked-count" class="cherry-picked-count"></span></span>
+            <span>
+                {% if commits.is_empty() %}
+                    {% if needs_push %}
+                    Merged locally — push to update the remote
+                    {% else %}
+                    No new commits
+                    {% endif %}
+                {% else %}
+                    Found <strong>{{ commits.len() }}</strong> commits <span id="cherry-picked-count" class="cherry-picked-count"></span>
+                {% endif %}
+            </span>
             <div style="display: flex; gap: 8px;">
                 <button onclick="syncRepository()" id="sync-btn" class="btn-sync" title="Refresh index from git">
                     🔄 Sync
                 </button>
+                {% if !commits.is_empty() %}
                 <button onclick="cherryPickSelected()" id="cherry-pick-btn" class="btn-cherry-pick">
                     🍒 Cherry-pick Selected
                 </button>
-                <button onclick="pushChanges()" id="push-btn" class="btn-push" style="display: none;">
+                {% endif %}
+                <button onclick="pushChanges()" id="push-btn" class="btn-push"{% if !needs_push %} style="display: none;"{% endif %}>
                     ↑ Push to Remote
                 </button>
             </div>
         </div>
-        {% endif %}
     </div>
         <h2>Branch Comparison: {{ from_branch }} → {{ to_branch }}</h2>
         <p class="comparison-desc">
             <em>Showing commits in <code>{{ from_branch }}</code> that are NOT in <code>{{ to_branch }}</code></em>
         </p>
         
+        <div id="status-message" class="hidden"></div>
         {% if commits.is_empty() %}
         <p class="no-diff-msg">
-            ✓ No new commits in {{ to_branch }} - branches are in sync or {{ from_branch }} is ahead
+            {% if needs_push %}
+            ✓ No remaining commits in <code>{{ from_branch }}</code> that are missing from local <code>{{ to_branch }}</code>. Push to publish.
+            {% else %}
+            ✓ No new commits in {{ from_branch }} that are missing from {{ to_branch }}
+            {% endif %}
         </p>
         {% else %}
-        <div id="status-message" class="hidden"></div>
         <form id="commits-form">
         <table class="repositories">
             <thead>

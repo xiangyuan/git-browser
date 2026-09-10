@@ -112,6 +112,17 @@ document.addEventListener('DOMContentLoaded', () => {
     updateTimeAgo();
     // 每分钟更新一次
     setInterval(updateTimeAgo, 60000);
+
+    const flash = sessionStorage.getItem('gitx-status');
+    if (flash) {
+        sessionStorage.removeItem('gitx-status');
+        try {
+            const parsed = JSON.parse(flash);
+            showMessage(parsed.text, parsed.type || 'success');
+        } catch (e) {
+            console.error('Failed to restore status message', e);
+        }
+    }
 });
 
 // 分支选择器：交换两个分支
@@ -388,14 +399,11 @@ function mergeBranches() {
         
         if (data.success) {
             let message = `✅ ${data.message}`;
-            if (!data.message.includes('Already up to date')) {
+            if (data.message && !data.message.includes('Already up to date')) {
                 message += `\nNext step: Click "Push to Remote" to sync with the server.`;
-                const pushBtn = document.getElementById('push-btn');
-                if (pushBtn) {
-                    pushBtn.style.display = 'block';
-                }
             }
-            showMessage(message, 'success');
+            sessionStorage.setItem('gitx-status', JSON.stringify({ text: message, type: 'success' }));
+            window.location.reload();
         } else {
             showMessage(`❌ Merge failed: ${data.error}`, 'error');
         }
